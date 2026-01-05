@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save, Upload } from 'lucide-react';
 import { Event, LogoAlignment } from '@/lib/types';
@@ -15,6 +15,27 @@ export default function NewEventPage() {
   const [logoUrl, setLogoUrl] = useState<string>('');
   const [logoAlignment, setLogoAlignment] = useState<LogoAlignment>('center');
   const [activities, setActivities] = useState<Event['activities']>([]);
+
+  // Check for imported event data
+  useEffect(() => {
+    const importedData = sessionStorage.getItem('importedEventData');
+    if (importedData) {
+      try {
+        const imported = JSON.parse(importedData);
+        if (imported.eventName) setEventName(imported.eventName);
+        if (imported.eventDate) setEventDate(imported.eventDate);
+        if (imported.logoUrl) setLogoUrl(imported.logoUrl);
+        if (imported.logoAlignment) setLogoAlignment(imported.logoAlignment);
+        if (imported.activities && Array.isArray(imported.activities)) {
+          setActivities(imported.activities);
+        }
+        // Clear the imported data after use
+        sessionStorage.removeItem('importedEventData');
+      } catch (error) {
+        console.error('Error parsing imported event data:', error);
+      }
+    }
+  }, []);
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

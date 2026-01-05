@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { ArrowLeft, Download, FileJson, FileSpreadsheet, CheckCircle2, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from 'lucide-react';
+import { ArrowLeft, Download, FileJson, FileSpreadsheet, CheckCircle2, ChevronLeft, ChevronRight, Maximize2, Minimize2, Edit2, Save, X } from 'lucide-react';
 import { Event, Activity } from '@/lib/types';
 import { getEventById, saveEvent } from '@/lib/storage';
 import { convertActivitiesToResults, exportToJSON, exportToCSV, downloadFile } from '@/lib/export';
 import Timer from '@/components/Timer';
+import EditableActivityList from '@/components/EditableActivityList';
 import { formatTimeReadable } from '@/lib/utils';
 
 export default function EventPage() {
@@ -18,6 +19,9 @@ export default function EventPage() {
   const [currentActivityIndex, setCurrentActivityIndex] = useState(0);
   const [isEventStarted, setIsEventStarted] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [isEditingEvent, setIsEditingEvent] = useState(false);
+  const [editEventName, setEditEventName] = useState('');
+  const [editEventDate, setEditEventDate] = useState('');
 
   useEffect(() => {
     const loadedEvent = getEventById(eventId);
@@ -26,6 +30,8 @@ export default function EventPage() {
       return;
     }
     setEvent(loadedEvent);
+    setEditEventName(loadedEvent.eventName);
+    setEditEventDate(loadedEvent.eventDate);
     
     // Check if event has been started
     const started = loadedEvent.activities.some(a => a.isCompleted || a.isActive);
@@ -37,6 +43,33 @@ export default function EventPage() {
       setCurrentActivityIndex(firstIncomplete);
     }
   }, [eventId, router]);
+
+  const handleSaveEventDetails = () => {
+    if (!event) return;
+
+    if (!editEventName.trim()) {
+      alert('Please enter an event name');
+      return;
+    }
+
+    const updatedEvent = {
+      ...event,
+      eventName: editEventName.trim(),
+      eventDate: editEventDate,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setEvent(updatedEvent);
+    saveEvent(updatedEvent);
+    setIsEditingEvent(false);
+  };
+
+  const handleCancelEditEvent = () => {
+    if (!event) return;
+    setEditEventName(event.eventName);
+    setEditEventDate(event.eventDate);
+    setIsEditingEvent(false);
+  };
 
   if (!event) {
     return (
@@ -102,6 +135,25 @@ export default function EventPage() {
     setIsEventStarted(true);
   };
 
+  const handleUpdateActivities = (updatedActivities: Activity[]) => {
+    if (!event) return;
+
+    const updatedEvent = {
+      ...event,
+      activities: updatedActivities,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setEvent(updatedEvent);
+    saveEvent(updatedEvent);
+    
+    // Update current activity index if needed
+    const firstIncomplete = updatedActivities.findIndex(a => !a.isCompleted);
+    if (firstIncomplete >= 0 && firstIncomplete !== currentActivityIndex) {
+      setCurrentActivityIndex(firstIncomplete);
+    }
+  };
+
   const handleExportJSON = () => {
     const results = convertActivitiesToResults(event.activities, event.eventDate);
     const json = exportToJSON(results);
@@ -126,7 +178,7 @@ export default function EventPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header */}
       <div className={`bg-white shadow-md p-4 md:p-6 ${isFullScreen ? 'hidden' : ''}`}>
         <div className="max-w-7xl mx-auto">
@@ -183,23 +235,80 @@ export default function EventPage() {
             {event.logoUrl && (
               <img src={event.logoUrl} alt="Logo" className="h-16 md:h-20 object-contain" />
             )}
-            <div>
-              <h1 className="text-3xl md:text-4xl font-bold text-gray-900">{event.eventName}</h1>
-              <p className="text-gray-600 mt-1">
-                {new Date(event.eventDate).toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}
-              </p>
+            <div className="flex-1">
+              {isEditingEvent ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                      Event Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editEventName}
+                      onChange={(e) => setEditEventName(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 text-2xl font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                      Event Date
+                    </label>
+                    <input
+                      type="date"
+                      value={editEventDate}
+                      onChange={(e) => setEditEventDate(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleSaveEventDetails}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
+                    >
+                      <Save className="w-4 h-4" />
+                      Save
+                    </button>
+                    <button
+                      onClick={handleCancelEditEvent}
+                      className="flex items-center gap-2 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded-lg transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h1 className="text-3xl md:text-4xl font-bold text-gray-900">{event.eventName}</h1>
+                    <p className="text-gray-600 mt-1">
+                      {new Date(event.eventDate).toLocaleDateString('en-US', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                      })}
+                    </p>
+                  </div>
+                  {!isEventStarted && (
+                    <button
+                      onClick={() => setIsEditingEvent(true)}
+                      className="flex items-center gap-2 px-3 py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-semibold rounded-lg transition-colors"
+                      title="Edit Event Details"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                      Edit
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className={`${isFullScreen ? 'h-screen flex flex-col' : 'max-w-7xl mx-auto p-4 md:p-8'}`}>
+      <div className={`${isFullScreen ? 'h-screen flex flex-col' : 'max-w-7xl mx-auto p-4 md:p-8 pb-20'}`}>
         {allCompleted ? (
           <div className="bg-white rounded-lg shadow-lg p-8 text-center">
             <CheckCircle2 className="w-16 h-16 mx-auto text-green-600 mb-4" />
@@ -340,37 +449,12 @@ export default function EventPage() {
 
             {/* Activity List */}
             {!isFullScreen && (
-              <div className="mt-12 space-y-2">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Activity List</h3>
-                {event.activities.map((activity, idx) => (
-                  <div
-                    key={activity.id}
-                    className={`p-4 rounded-lg border-2 ${
-                      idx === currentActivityIndex
-                        ? 'border-indigo-600 bg-indigo-50'
-                        : activity.isCompleted
-                        ? 'border-green-500 bg-green-50'
-                        : 'border-gray-200 bg-gray-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        {activity.isCompleted ? (
-                          <CheckCircle2 className="w-5 h-5 text-green-600" />
-                        ) : (
-                          <div className="w-5 h-5 rounded-full border-2 border-gray-400" />
-                        )}
-                        <span className="font-medium text-gray-900">
-                          {idx + 1}. {activity.activityName}
-                        </span>
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        {formatTimeReadable(activity.timeAllotted)}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <EditableActivityList
+                activities={event.activities}
+                onUpdate={handleUpdateActivities}
+                disabled={isEventStarted}
+                currentActivityIndex={currentActivityIndex}
+              />
             )}
           </div>
         ) : (

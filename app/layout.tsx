@@ -15,7 +15,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased flex flex-col min-h-screen">
-        <main className="flex-1">
+        <main className="flex-1 overflow-auto">
           {children}
         </main>
         <Footer />
