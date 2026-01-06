@@ -14,6 +14,7 @@ if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
 
 const config: NextAuthConfig = {
   secret: process.env.NEXTAUTH_SECRET,
+  trustHost: true, // Required for NextAuth v5 in production environments
   // Using JWT strategy, so we don't need PrismaAdapter
   // We'll handle user creation/updates manually in the providers
   providers: [
