@@ -30,20 +30,44 @@ export function formatTimeReadable(seconds: number): string {
 }
 
 export function parseTimeToSeconds(timeString: string): number {
-  // Parse formats like "3 minutes", "12 minutes", "1 hour 30 minutes"
-  const parts = timeString.toLowerCase().trim().split(/\s+/);
+  if (!timeString || typeof timeString !== 'string') return 0;
+  
+  const trimmed = timeString.trim();
+  
+  // Handle HH:MM:SS or MM:SS format (e.g., "00:05:00", "05:00")
+  const timeFormatMatch = trimmed.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (timeFormatMatch) {
+    const hours = timeFormatMatch[3] !== undefined ? parseInt(timeFormatMatch[1]) : 0;
+    const minutes = timeFormatMatch[3] !== undefined ? parseInt(timeFormatMatch[2]) : parseInt(timeFormatMatch[1]);
+    const seconds = timeFormatMatch[3] !== undefined ? parseInt(timeFormatMatch[3]) : parseInt(timeFormatMatch[2]);
+    return hours * 3600 + minutes * 60 + seconds;
+  }
+  
+  // Handle seconds format (e.g., "90s", "120s")
+  const secondsMatch = trimmed.match(/^(\d+)s$/i);
+  if (secondsMatch) {
+    return parseInt(secondsMatch[1]);
+  }
+  
+  // Handle natural language format (e.g., "3 minutes", "1 hour 30 minutes")
+  const parts = trimmed.toLowerCase().split(/\s+/);
   let totalSeconds = 0;
 
   for (let i = 0; i < parts.length; i += 2) {
     const value = parseInt(parts[i]);
+    if (isNaN(value)) continue;
+    
     const unit = parts[i + 1] || '';
 
     if (unit.includes('hour')) {
       totalSeconds += value * 3600;
-    } else if (unit.includes('minute')) {
+    } else if (unit.includes('minute') || unit.includes('min')) {
       totalSeconds += value * 60;
-    } else if (unit.includes('second')) {
+    } else if (unit.includes('second') || unit.includes('sec')) {
       totalSeconds += value;
+    } else if (i === 0 && parts.length === 1) {
+      // If it's just a number, assume minutes
+      totalSeconds += value * 60;
     }
   }
 

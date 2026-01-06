@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Edit2, Save, X, Trash2, CheckCircle2, Plus } from 'lucide-react';
 import { Activity } from '@/lib/types';
 import { formatTimeReadable, parseTimeToSeconds, generateId } from '@/lib/utils';
@@ -23,6 +23,13 @@ export default function EditableActivityList({ activities, onUpdate, disabled = 
   const [newActivityTime, setNewActivityTime] = useState('');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  // Sync editedActivities when activities prop changes (but not when editing)
+  useEffect(() => {
+    if (!isEditing) {
+      setEditedActivities(activities);
+    }
+  }, [activities, isEditing]);
 
   const handleStartEdit = (index: number) => {
     const activity = editedActivities[index];

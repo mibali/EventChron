@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Footer from "@/components/Footer";
+import { SessionProvider } from "@/components/SessionProvider";
 
 export const metadata: Metadata = {
-  title: "Event Timer - SaaS Platform",
+  title: "EventChron - SaaS Platform",
   description: "Professional event timer for church services, conferences, and meetups",
 };
 
@@ -15,10 +16,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased flex flex-col min-h-screen">
-        <main className="flex-1 overflow-auto">
-          {children}
-        </main>
-        <Footer />
+        <SessionProvider>
+          <main className="flex-1 overflow-auto">
+            {children}
+          </main>
+          <Footer />
+        </SessionProvider>
       </body>
     </html>
   );

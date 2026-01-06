@@ -1,4 +1,4 @@
-# Event Timer - Usage Guide
+# EventChron - Usage Guide
 
 ## Quick Start
 

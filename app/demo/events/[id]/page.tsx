@@ -2,19 +2,18 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import { ArrowLeft, Download, FileJson, FileSpreadsheet, CheckCircle2, ChevronLeft, ChevronRight, Maximize2, Minimize2, Edit2, Save, X } from 'lucide-react';
 import { Event, Activity } from '@/lib/types';
-import { getEventById, updateEvent } from '@/lib/api';
 import { convertActivitiesToResults, exportToJSON, exportToCSV, downloadFile } from '@/lib/export';
 import Timer from '@/components/Timer';
 import EditableActivityList from '@/components/EditableActivityList';
 import { formatTimeReadable } from '@/lib/utils';
 
-export default function EventPage() {
+const DEMO_EVENTS_KEY = 'eventchron_demo_events';
+
+export default function DemoEventPage() {
   const router = useRouter();
   const params = useParams();
-  const { data: session, status } = useSession();
   const eventId = params.id as string;
 
   const [event, setEvent] = useState<Event | null>(null);
@@ -26,46 +25,58 @@ export default function EventPage() {
   const [editEventName, setEditEventName] = useState('');
   const [editEventDate, setEditEventDate] = useState('');
 
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/login');
-      return;
-    }
-    if (status === 'authenticated') {
-      loadEvent();
-    }
-  }, [eventId, status, router]);
-
-  const loadEvent = async () => {
+  const getDemoEvents = (): Event[] => {
+    if (typeof window === 'undefined') return [];
+    const stored = localStorage.getItem(DEMO_EVENTS_KEY);
+    if (!stored) return [];
     try {
-      setIsLoading(true);
-      const loadedEvent = await getEventById(eventId);
-      if (!loadedEvent) {
-        router.push('/dashboard');
-        return;
-      }
-      setEvent(loadedEvent);
-      setEditEventName(loadedEvent.eventName);
-      setEditEventDate(loadedEvent.eventDate);
-      
-      // Check if event has been started
-      const started = loadedEvent.activities.some(a => a.isCompleted || a.isActive);
-      setIsEventStarted(started);
-      
-      // Find first incomplete activity
-      const firstIncomplete = loadedEvent.activities.findIndex(a => !a.isCompleted);
-      if (firstIncomplete >= 0) {
-        setCurrentActivityIndex(firstIncomplete);
-      }
-    } catch (error) {
-      console.error('Error loading event:', error);
-      router.push('/dashboard');
-    } finally {
-      setIsLoading(false);
+      return JSON.parse(stored);
+    } catch {
+      return [];
     }
   };
 
-  const handleSaveEventDetails = async () => {
+  const getDemoEventById = (id: string): Event | null => {
+    const events = getDemoEvents();
+    return events.find(e => e.id === id) || null;
+  };
+
+  const saveDemoEvent = (event: Event): void => {
+    const events = getDemoEvents();
+    const existingIndex = events.findIndex(e => e.id === event.id);
+    
+    if (existingIndex >= 0) {
+      events[existingIndex] = { ...event, updatedAt: new Date().toISOString() };
+    } else {
+      events.push(event);
+    }
+    
+    localStorage.setItem(DEMO_EVENTS_KEY, JSON.stringify(events));
+  };
+
+  useEffect(() => {
+    const loadedEvent = getDemoEventById(eventId);
+    if (!loadedEvent) {
+      router.push('/demo');
+      return;
+    }
+    setEvent(loadedEvent);
+    setEditEventName(loadedEvent.eventName);
+    setEditEventDate(loadedEvent.eventDate);
+    
+    // Check if event has been started
+    const started = loadedEvent.activities.some(a => a.isCompleted || a.isActive);
+    setIsEventStarted(started);
+    
+    // Find first incomplete activity
+    const firstIncomplete = loadedEvent.activities.findIndex(a => !a.isCompleted);
+    if (firstIncomplete >= 0) {
+      setCurrentActivityIndex(firstIncomplete);
+    }
+    setIsLoading(false);
+  }, [eventId, router]);
+
+  const handleSaveEventDetails = () => {
     if (!event) return;
 
     if (!editEventName.trim()) {
@@ -73,18 +84,16 @@ export default function EventPage() {
       return;
     }
 
-    try {
-      const updatedEvent = await updateEvent(eventId, {
-        eventName: editEventName.trim(),
-        eventDate: editEventDate,
-      });
+    const updatedEvent = {
+      ...event,
+      eventName: editEventName.trim(),
+      eventDate: editEventDate,
+      updatedAt: new Date().toISOString(),
+    };
 
-      setEvent(updatedEvent);
-      setIsEditingEvent(false);
-    } catch (error) {
-      console.error('Error updating event:', error);
-      alert('Failed to update event. Please try again.');
-    }
+    setEvent(updatedEvent);
+    saveDemoEvent(updatedEvent);
+    setIsEditingEvent(false);
   };
 
   const handleCancelEditEvent = () => {
@@ -94,7 +103,7 @@ export default function EventPage() {
     setIsEditingEvent(false);
   };
 
-  if (status === 'loading' || isLoading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-gray-600">Loading...</div>
@@ -121,7 +130,7 @@ export default function EventPage() {
     : null;
   const allCompleted = event.activities.length > 0 && event.activities.every(a => a.isCompleted);
 
-  const handleActivityStop = async (timeSpent: number) => {
+  const handleActivityStop = (timeSpent: number) => {
     if (!event || !currentActivity) return;
 
     const updatedActivities = [...event.activities];
@@ -139,25 +148,23 @@ export default function EventPage() {
       activity.extraTimeTaken = 0;
     }
 
-    try {
-      const updatedEvent = await updateEvent(eventId, {
-        activities: updatedActivities,
-      });
+    const updatedEvent = {
+      ...event,
+      activities: updatedActivities,
+      updatedAt: new Date().toISOString(),
+    };
 
-      setEvent(updatedEvent);
+    setEvent(updatedEvent);
+    saveDemoEvent(updatedEvent);
 
-      // Move to next activity if available
-      const nextIndex = updatedActivities.findIndex(a => !a.isCompleted);
-      if (nextIndex >= 0) {
-        setCurrentActivityIndex(nextIndex);
-      }
-    } catch (error) {
-      console.error('Error updating event:', error);
-      alert('Failed to save activity time. Please try again.');
+    // Move to next activity if available
+    const nextIndex = updatedActivities.findIndex(a => !a.isCompleted);
+    if (nextIndex >= 0) {
+      setCurrentActivityIndex(nextIndex);
     }
   };
 
-  const handleStartActivity = async () => {
+  const handleStartActivity = () => {
     if (!event || !currentActivity) return;
     
     // Don't allow starting already completed activities
@@ -168,46 +175,42 @@ export default function EventPage() {
       isActive: idx === currentActivityIndex,
     }));
 
-    try {
-      const updatedEvent = await updateEvent(eventId, {
-        activities: updatedActivities,
-      });
+    const updatedEvent = {
+      ...event,
+      activities: updatedActivities,
+      updatedAt: new Date().toISOString(),
+    };
 
-      setEvent(updatedEvent);
-      setIsEventStarted(true);
-    } catch (error) {
-      console.error('Error starting activity:', error);
-      alert('Failed to start activity. Please try again.');
-    }
+    setEvent(updatedEvent);
+    saveDemoEvent(updatedEvent);
+    setIsEventStarted(true);
   };
 
-  const handleUpdateActivities = async (updatedActivities: Activity[]) => {
+  const handleUpdateActivities = (updatedActivities: Activity[]) => {
     if (!event) return;
 
-    try {
-      const updatedEvent = await updateEvent(eventId, {
-        activities: updatedActivities,
-      });
+    const updatedEvent = {
+      ...event,
+      activities: updatedActivities,
+      updatedAt: new Date().toISOString(),
+    };
 
-      setEvent(updatedEvent);
-      
-      // Ensure currentActivityIndex is valid after update
-      if (updatedActivities.length === 0) {
-        setCurrentActivityIndex(0);
-      } else if (currentActivityIndex >= updatedActivities.length) {
-        // If current index is out of bounds, find first incomplete or use last activity
-        const firstIncomplete = updatedActivities.findIndex(a => !a.isCompleted);
-        setCurrentActivityIndex(firstIncomplete >= 0 ? firstIncomplete : updatedActivities.length - 1);
-      } else {
-        // Update to first incomplete if current is completed
-        const firstIncomplete = updatedActivities.findIndex(a => !a.isCompleted);
-        if (firstIncomplete >= 0 && firstIncomplete !== currentActivityIndex) {
-          setCurrentActivityIndex(firstIncomplete);
-        }
+    setEvent(updatedEvent);
+    saveDemoEvent(updatedEvent);
+    
+    // Ensure currentActivityIndex is valid after update
+    if (updatedActivities.length === 0) {
+      setCurrentActivityIndex(0);
+    } else if (currentActivityIndex >= updatedActivities.length) {
+      // If current index is out of bounds, find first incomplete or use last activity
+      const firstIncomplete = updatedActivities.findIndex(a => !a.isCompleted);
+      setCurrentActivityIndex(firstIncomplete >= 0 ? firstIncomplete : updatedActivities.length - 1);
+    } else {
+      // Update to first incomplete if current is completed
+      const firstIncomplete = updatedActivities.findIndex(a => !a.isCompleted);
+      if (firstIncomplete >= 0 && firstIncomplete !== currentActivityIndex) {
+        setCurrentActivityIndex(firstIncomplete);
       }
-    } catch (error) {
-      console.error('Error updating activities:', error);
-      alert('Failed to update activities. Please try again.');
     }
   };
 
@@ -241,13 +244,16 @@ export default function EventPage() {
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-4">
             <button
-              onClick={() => router.push('/dashboard')}
+              onClick={() => router.push('/demo')}
               className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />
-              Back to Events
+              Back to Demo
             </button>
             <div className="flex items-center gap-2">
+              <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-2 rounded-lg text-sm font-semibold">
+                Demo Mode
+              </div>
               {!allCompleted && currentActivity && (
                 <button
                   onClick={() => setIsFullScreen(!isFullScreen)}
@@ -523,4 +529,3 @@ export default function EventPage() {
     </div>
   );
 }
-

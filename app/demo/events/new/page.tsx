@@ -2,29 +2,50 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import { Save, Upload } from 'lucide-react';
 import { Event, LogoAlignment } from '@/lib/types';
-import { compressImage } from '@/lib/utils';
-import { createEvent } from '@/lib/api';
+import { generateId, compressImage } from '@/lib/utils';
 import ActivityForm from '@/components/ActivityForm';
 
-export default function NewEventPage() {
+const DEMO_EVENTS_KEY = 'eventchron_demo_events';
+const MAX_DEMO_EVENTS = 5;
+
+export default function DemoNewEventPage() {
   const router = useRouter();
-  const { data: session, status } = useSession();
   const [eventName, setEventName] = useState('');
   const [eventDate, setEventDate] = useState(new Date().toISOString().split('T')[0]);
   const [logoUrl, setLogoUrl] = useState<string>('');
   const [logoAlignment, setLogoAlignment] = useState<LogoAlignment>('center');
   const [activities, setActivities] = useState<Event['activities']>([]);
-  const [isSaving, setIsSaving] = useState(false);
 
-  // Redirect if not authenticated
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/login');
+  // Demo-specific storage functions
+  const getDemoEvents = (): Event[] => {
+    if (typeof window === 'undefined') return [];
+    const stored = localStorage.getItem(DEMO_EVENTS_KEY);
+    if (!stored) return [];
+    try {
+      return JSON.parse(stored);
+    } catch {
+      return [];
     }
-  }, [status, router]);
+  };
+
+  const saveDemoEvent = (event: Event): void => {
+    const events = getDemoEvents();
+    const existingIndex = events.findIndex(e => e.id === event.id);
+    
+    if (existingIndex >= 0) {
+      events[existingIndex] = { ...event, updatedAt: new Date().toISOString() };
+    } else {
+      if (events.length >= MAX_DEMO_EVENTS) {
+        alert(`Demo mode is limited to ${MAX_DEMO_EVENTS} events. Please sign up to create unlimited events.`);
+        return;
+      }
+      events.push(event);
+    }
+    
+    localStorage.setItem(DEMO_EVENTS_KEY, JSON.stringify(events));
+  };
 
   // Check for imported event data
   useEffect(() => {
@@ -87,7 +108,7 @@ export default function NewEventPage() {
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!eventName.trim()) {
       alert('Please enter an event name');
       return;
@@ -98,40 +119,41 @@ export default function NewEventPage() {
       return;
     }
 
-    if (!session) {
-      alert('You must be logged in to create events');
-      router.push('/login');
+    const events = getDemoEvents();
+    if (events.length >= MAX_DEMO_EVENTS) {
+      alert(`Demo mode is limited to ${MAX_DEMO_EVENTS} events. Please sign up to create unlimited events.`);
       return;
     }
 
-    setIsSaving(true);
-    try {
-      const newEvent = await createEvent({
-        eventName: eventName.trim(),
-        eventDate,
-        logoUrl: logoUrl || undefined,
-        logoAlignment,
-        activities: activities.map(a => ({
-          activityName: a.activityName,
-          timeAllotted: a.timeAllotted,
-          isCompleted: false,
-          isActive: false,
-        })),
-      });
+    const newEvent: Event = {
+      id: generateId(),
+      eventName: eventName.trim(),
+      eventDate,
+      logoUrl,
+      logoAlignment,
+      activities: activities.map(a => ({
+        ...a,
+        isCompleted: false,
+        isActive: false,
+      })),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
 
-      router.push(`/events/${newEvent.id}`);
-    } catch (error) {
-      console.error('Error creating event:', error);
-      alert('Failed to create event. Please try again.');
-      setIsSaving(false);
-    }
+    saveDemoEvent(newEvent);
+    router.push(`/demo/events/${newEvent.id}`);
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
         <div className="bg-white rounded-lg shadow-lg p-6 md:p-8 space-y-6">
-          <h1 className="text-3xl font-bold text-gray-900">Create New Event</h1>
+          <div className="flex items-center justify-between">
+            <h1 className="text-3xl font-bold text-gray-900">Create New Event (Demo)</h1>
+            <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-2 rounded-lg text-sm">
+              Demo Mode - Limited to {MAX_DEMO_EVENTS} events
+            </div>
+          </div>
 
           <div className="space-y-4">
             <div>
@@ -215,18 +237,17 @@ export default function NewEventPage() {
 
             <div className="flex gap-4 pt-4">
               <button
-                onClick={() => router.back()}
+                onClick={() => router.push('/demo')}
                 className="px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded-lg transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
-                disabled={isSaving || status === 'loading'}
-                className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-lg transition-colors"
               >
                 <Save className="w-5 h-5" />
-                {isSaving ? 'Saving...' : 'Save Event'}
+                Save Event
               </button>
             </div>
           </div>
@@ -235,5 +256,4 @@ export default function NewEventPage() {
     </div>
   );
 }
-
 
