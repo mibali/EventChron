@@ -71,6 +71,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Verify user exists in database (prevent foreign key constraint errors)
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { id: true },
+    });
+
+    if (!user) {
+      console.error('POST /api/events: User not found in database', { 
+        userId: session.user.id,
+        userEmail: session.user.email,
+      });
+      return NextResponse.json(
+        { error: 'User account not found. Please sign in again.' },
+        { status: 401 }
+      );
+    }
+
     // Parse request body
     let body;
     try {
@@ -274,6 +291,27 @@ export async function POST(request: NextRequest) {
       
       // Check for specific Prisma errors
       if (dbError instanceof Error) {
+        // Check for Prisma error codes
+        const prismaError = dbError as any;
+        if (prismaError.code === 'P2002') {
+          // Unique constraint violation
+          return NextResponse.json(
+            { error: 'An event with this name already exists' },
+            { status: 409 }
+          );
+        }
+        if (prismaError.code === 'P2003') {
+          // Foreign key constraint violation
+          console.error('POST /api/events: Foreign key constraint failed', {
+            userId: session.user.id,
+            error: dbError.message,
+            meta: prismaError.meta,
+          });
+          return NextResponse.json(
+            { error: 'User account not found. Please sign out and sign in again.' },
+            { status: 401 }
+          );
+        }
         if (dbError.message.includes('Unique constraint') || dbError.message.includes('unique')) {
           return NextResponse.json(
             { error: 'An event with this name already exists' },
@@ -281,9 +319,13 @@ export async function POST(request: NextRequest) {
           );
         }
         if (dbError.message.includes('Foreign key constraint') || dbError.message.includes('foreign key')) {
+          console.error('POST /api/events: Foreign key constraint failed (message match)', {
+            userId: session.user.id,
+            error: dbError.message,
+          });
           return NextResponse.json(
-            { error: 'Invalid user account' },
-            { status: 400 }
+            { error: 'User account not found. Please sign out and sign in again.' },
+            { status: 401 }
           );
         }
         if (dbError.message.includes('Invalid value') || dbError.message.includes('Argument') || dbError.message.includes('Invalid')) {
