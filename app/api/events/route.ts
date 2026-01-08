@@ -127,13 +127,48 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      if (typeof activity.timeAllotted !== 'number' || activity.timeAllotted < 0 || !Number.isInteger(activity.timeAllotted)) {
-        console.error(`POST /api/events: Invalid timeAllotted at index ${i}`, { timeAllotted: activity.timeAllotted });
+      // Validate timeAllotted - allow numbers and convert to integer
+      if (activity.timeAllotted === undefined || activity.timeAllotted === null) {
+        console.error(`POST /api/events: Missing timeAllotted at index ${i}`, { activity });
         return NextResponse.json(
-          { error: `Activity at position ${i + 1} must have a valid time allotment (non-negative integer in seconds)` },
+          { error: `Activity at position ${i + 1} must have a time allotment` },
           { status: 400 }
         );
       }
+      
+      // Convert to number if it's a string
+      let timeAllottedValue: number;
+      if (typeof activity.timeAllotted === 'string') {
+        timeAllottedValue = parseFloat(activity.timeAllotted);
+        if (isNaN(timeAllottedValue)) {
+          console.error(`POST /api/events: Invalid timeAllotted string at index ${i}`, { timeAllotted: activity.timeAllotted });
+          return NextResponse.json(
+            { error: `Activity at position ${i + 1} has invalid time allotment format` },
+            { status: 400 }
+          );
+        }
+      } else if (typeof activity.timeAllotted === 'number') {
+        timeAllottedValue = activity.timeAllotted;
+      } else {
+        console.error(`POST /api/events: Invalid timeAllotted type at index ${i}`, { timeAllotted: activity.timeAllotted, type: typeof activity.timeAllotted });
+        return NextResponse.json(
+          { error: `Activity at position ${i + 1} must have a valid time allotment (number in seconds)` },
+          { status: 400 }
+        );
+      }
+      
+      // Ensure it's a non-negative integer
+      const timeAllottedInt = Math.floor(Math.abs(timeAllottedValue));
+      if (timeAllottedInt < 0) {
+        console.error(`POST /api/events: Negative timeAllotted at index ${i}`, { timeAllotted: timeAllottedValue });
+        return NextResponse.json(
+          { error: `Activity at position ${i + 1} must have a non-negative time allotment` },
+          { status: 400 }
+        );
+      }
+      
+      // Update the activity with the validated integer value
+      activity.timeAllotted = timeAllottedInt;
     }
 
     // Parse and validate date
@@ -157,6 +192,21 @@ export async function POST(request: NextRequest) {
 
     // Create event in database
     try {
+      // Prepare activities data with validated values
+      const activitiesData = activities.map((activity: any, index: number) => ({
+        activityName: activity.activityName.trim(),
+        timeAllotted: activity.timeAllotted, // Already validated and converted to integer
+        order: index,
+      }));
+
+      console.log('POST /api/events: Attempting to create event', {
+        userId: session.user.id,
+        eventName: eventName.trim(),
+        eventDate: parsedDate.toISOString(),
+        activitiesCount: activitiesData.length,
+        activities: activitiesData.map(a => ({ name: a.activityName, time: a.timeAllotted })),
+      });
+
       const event = await prisma.event.create({
         data: {
           eventName: eventName.trim(),
@@ -165,11 +215,7 @@ export async function POST(request: NextRequest) {
           logoAlignment: finalLogoAlignment,
           userId: session.user.id,
           activities: {
-            create: activities.map((activity: any, index: number) => ({
-              activityName: activity.activityName.trim(),
-              timeAllotted: activity.timeAllotted,
-              order: index,
-            })),
+            create: activitiesData,
           },
         },
         include: {
@@ -188,20 +234,36 @@ export async function POST(request: NextRequest) {
         stack: dbError instanceof Error ? dbError.stack : undefined,
         userId: session.user.id,
         eventName: eventName.trim(),
+        eventDate: parsedDate.toISOString(),
         activitiesCount: activities.length,
+        activities: activities.map((a: any) => ({
+          name: a.activityName,
+          timeAllotted: a.timeAllotted,
+          timeAllottedType: typeof a.timeAllotted,
+        })),
+        requestBody: JSON.stringify({ eventName, eventDate, logoUrl, logoAlignment, activities }, null, 2),
       });
       
       // Check for specific Prisma errors
       if (dbError instanceof Error) {
-        if (dbError.message.includes('Unique constraint')) {
+        if (dbError.message.includes('Unique constraint') || dbError.message.includes('unique')) {
           return NextResponse.json(
             { error: 'An event with this name already exists' },
             { status: 409 }
           );
         }
-        if (dbError.message.includes('Foreign key constraint')) {
+        if (dbError.message.includes('Foreign key constraint') || dbError.message.includes('foreign key')) {
           return NextResponse.json(
             { error: 'Invalid user account' },
+            { status: 400 }
+          );
+        }
+        if (dbError.message.includes('Invalid value') || dbError.message.includes('Argument') || dbError.message.includes('Invalid')) {
+          return NextResponse.json(
+            { 
+              error: 'Invalid data format. Please check all field values.',
+              details: process.env.NODE_ENV === 'development' ? dbError.message : undefined,
+            },
             { status: 400 }
           );
         }
@@ -214,14 +276,26 @@ export async function POST(request: NextRequest) {
       error,
       message: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
+      errorName: error instanceof Error ? error.name : 'Unknown',
+      errorCode: (error as any)?.code,
     });
     
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     const isDevelopment = process.env.NODE_ENV === 'development';
     
+    // Provide more helpful error messages
+    let userFriendlyError = 'Failed to create event';
+    if (error instanceof Error) {
+      if (error.message.includes('timeout') || error.message.includes('ECONNRESET')) {
+        userFriendlyError = 'Database connection timeout. Please try again.';
+      } else if (error.message.includes('connection') || error.message.includes('connect')) {
+        userFriendlyError = 'Unable to connect to database. Please try again later.';
+      }
+    }
+    
     return NextResponse.json(
       { 
-        error: 'Failed to create event',
+        error: userFriendlyError,
         ...(isDevelopment && { 
           details: errorMessage,
           hint: 'Check server logs for more information',
