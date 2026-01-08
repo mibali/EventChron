@@ -149,8 +149,22 @@ export default function EventPage() {
     });
 
     try {
+      console.log('handleActivityStop: Attempting to update event', {
+        eventId,
+        eventIdType: typeof eventId,
+        currentActivityIndex,
+        timeSpent,
+        activitiesCount: updatedActivities.length,
+        eventExists: !!event,
+      });
+
       const updatedEvent = await updateEvent(eventId, {
         activities: updatedActivities,
+      });
+
+      console.log('handleActivityStop: Event updated successfully', {
+        eventId: updatedEvent.id,
+        activitiesCount: updatedEvent.activities.length,
       });
 
       // Update state first
@@ -165,7 +179,12 @@ export default function EventPage() {
         }, 0);
       }
     } catch (error) {
-      console.error('Error updating event:', error);
+      console.error('handleActivityStop: Error updating event', {
+        error,
+        eventId,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorStack: error instanceof Error ? error.stack : undefined,
+      });
       alert('Failed to save activity time. Please try again.');
     }
   };

@@ -92,12 +92,29 @@ export async function updateEvent(
     activities: Activity[];
   }>
 ): Promise<Event> {
-  const response = await fetch(`${API_BASE}/events/${id}`, {
+  const url = `${API_BASE}/events/${id}`;
+  console.log('updateEvent: Making PUT request', {
+    url,
+    eventId: id,
+    eventIdType: typeof id,
+    hasActivities: !!event.activities,
+    activitiesCount: event.activities?.length,
+  });
+
+  const response = await fetch(url, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
     body: JSON.stringify(event),
   });
+
+  console.log('updateEvent: Response received', {
+    url,
+    status: response.status,
+    statusText: response.statusText,
+    ok: response.ok,
+  });
+
   const updatedEvent = await handleResponse<any>(response);
   return transformEvent(updatedEvent);
 }
