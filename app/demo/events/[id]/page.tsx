@@ -155,13 +155,21 @@ export default function DemoEventPage() {
       updatedAt: new Date().toISOString(),
     };
 
+    // Check if all activities are now completed
+    const allCompletedNow = updatedActivities.every(a => a.isCompleted);
+
     setEvent(updatedEvent);
     saveDemoEvent(updatedEvent);
 
-    // Move to next activity if available
-    const nextIndex = updatedActivities.findIndex(a => !a.isCompleted);
-    if (nextIndex >= 0) {
-      setCurrentActivityIndex(nextIndex);
+    // Move to next activity if available (only if not all completed)
+    if (!allCompletedNow) {
+      const nextIndex = updatedActivities.findIndex(a => !a.isCompleted);
+      if (nextIndex >= 0) {
+        setCurrentActivityIndex(nextIndex);
+      }
+    } else {
+      // All activities completed - ensure we're not trying to show a specific activity
+      setCurrentActivityIndex(0); // Reset to 0 so we don't show an invalid activity
     }
   };
 

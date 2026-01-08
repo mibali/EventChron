@@ -154,13 +154,23 @@ export default function EventPage() {
       ...event,
       activities: updatedActivities,
     };
+    
+    // Check if all activities are now completed
+    const allCompletedNow = updatedActivities.every(a => a.isCompleted);
+    
     setEvent(optimisticEvent);
     setIsEventStarted(true);
 
-    // Find next activity immediately
-    const nextIndex = updatedActivities.findIndex(a => !a.isCompleted);
-    if (nextIndex >= 0) {
-      setCurrentActivityIndex(nextIndex);
+    // Find next activity immediately (only if not all completed)
+    if (!allCompletedNow) {
+      const nextIndex = updatedActivities.findIndex(a => !a.isCompleted);
+      if (nextIndex >= 0) {
+        setCurrentActivityIndex(nextIndex);
+      }
+    } else {
+      // All activities completed - ensure we're not trying to show a specific activity
+      // The completion screen will show based on allCompleted check in render
+      setCurrentActivityIndex(0); // Reset to 0 so we don't show an invalid activity
     }
 
     // Sync with server in the background (non-blocking)
