@@ -7,14 +7,22 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const eventId = params?.id;
+    
+    if (!eventId || typeof eventId !== 'string') {
+      console.error('GET /api/events/[id]: Invalid event ID', { eventId, params });
+      return NextResponse.json({ error: 'Invalid event ID' }, { status: 400 });
+    }
+
     const session = await auth();
     if (!session?.user?.id) {
+      console.error('GET /api/events/[id]: Unauthorized', { eventId });
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const event = await prisma.event.findFirst({
       where: {
-        id: params.id,
+        id: eventId,
         userId: session.user.id,
       },
       include: {
@@ -25,12 +33,20 @@ export async function GET(
     });
 
     if (!event) {
+      console.error('GET /api/events/[id]: Event not found', { 
+        eventId,
+        userId: session.user.id,
+      });
       return NextResponse.json({ error: 'Event not found' }, { status: 404 });
     }
 
     return NextResponse.json(event);
   } catch (error) {
-    console.error('Error fetching event:', error);
+    console.error('GET /api/events/[id]: Error fetching event', {
+      error,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      params: params?.id,
+    });
     return NextResponse.json(
       { error: 'Failed to fetch event' },
       { status: 500 }
@@ -43,23 +59,63 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    // Log the incoming request
+    const eventId = params?.id;
+    console.log('PUT /api/events/[id]: Request received', { 
+      eventId,
+      eventIdType: typeof eventId,
+      url: request.url,
+      method: request.method,
+    });
+
+    if (!eventId || typeof eventId !== 'string') {
+      console.error('PUT /api/events/[id]: Invalid event ID', { eventId, params });
+      return NextResponse.json({ error: 'Invalid event ID' }, { status: 400 });
+    }
+
     // Check authentication
     const session = await auth();
+    console.log('PUT /api/events/[id]: Session check', { 
+      hasSession: !!session,
+      hasUserId: !!session?.user?.id,
+      userId: session?.user?.id,
+    });
+
     if (!session?.user?.id) {
       console.error('PUT /api/events/[id]: Unauthorized - no session or user ID');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // First check if event exists at all (without user filter for debugging)
+    const eventExists = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true, userId: true, eventName: true },
+    });
+
+    console.log('PUT /api/events/[id]: Event lookup', {
+      eventId,
+      eventExists: !!eventExists,
+      eventUserId: eventExists?.userId,
+      requestUserId: session.user.id,
+      userIdsMatch: eventExists?.userId === session.user.id,
+    });
+
     // Verify event belongs to user
     const existingEvent = await prisma.event.findFirst({
       where: {
-        id: params.id,
+        id: eventId,
         userId: session.user.id,
       },
     });
 
     if (!existingEvent) {
-      console.error('PUT /api/events/[id]: Event not found', { eventId: params.id, userId: session.user.id });
+      console.error('PUT /api/events/[id]: Event not found or access denied', { 
+        eventId,
+        userId: session.user.id,
+        eventExists: !!eventExists,
+        eventBelongsToUser: eventExists?.userId === session.user.id,
+        eventUserId: eventExists?.userId,
+      });
       return NextResponse.json({ error: 'Event not found' }, { status: 404 });
     }
 
