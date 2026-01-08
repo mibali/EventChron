@@ -5,8 +5,22 @@ const API_BASE = '/api';
 // Helper to handle API responses
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(error.error || `HTTP error! status: ${response.status}`);
+    let errorData;
+    try {
+      errorData = await response.json();
+    } catch {
+      errorData = { error: `HTTP error! status: ${response.status} ${response.statusText}` };
+    }
+    
+    const errorMessage = errorData.error || errorData.message || `HTTP error! status: ${response.status}`;
+    console.error('handleResponse: API error', {
+      status: response.status,
+      statusText: response.statusText,
+      errorData,
+      errorMessage,
+    });
+    
+    throw new Error(errorMessage);
   }
   return response.json();
 }
@@ -72,12 +86,33 @@ export async function createEvent(event: {
   logoAlignment: 'left' | 'center' | 'right';
   activities: Omit<Activity, 'id'>[];
 }): Promise<Event> {
-  const response = await fetch(`${API_BASE}/events`, {
+  const url = `${API_BASE}/events`;
+  console.log('createEvent: Making POST request', {
+    url,
+    eventName: event.eventName,
+    eventDate: event.eventDate,
+    activitiesCount: event.activities.length,
+    activities: event.activities.map(a => ({
+      name: a.activityName,
+      timeAllotted: a.timeAllotted,
+      timeAllottedType: typeof a.timeAllotted,
+    })),
+  });
+
+  const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
     body: JSON.stringify(event),
   });
+
+  console.log('createEvent: Response received', {
+    url,
+    status: response.status,
+    statusText: response.statusText,
+    ok: response.ok,
+  });
+
   const createdEvent = await handleResponse<any>(response);
   return transformEvent(createdEvent);
 }

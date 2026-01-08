@@ -85,9 +85,24 @@ export async function POST(request: NextRequest) {
 
     const { eventName, eventDate, logoUrl, logoAlignment, activities } = body;
 
+    console.log('POST /api/events: Request body received', {
+      hasEventName: !!eventName,
+      eventNameType: typeof eventName,
+      hasEventDate: !!eventDate,
+      eventDateType: typeof eventDate,
+      hasActivities: !!activities,
+      activitiesType: Array.isArray(activities) ? 'array' : typeof activities,
+      activitiesLength: Array.isArray(activities) ? activities.length : 'N/A',
+      bodyKeys: Object.keys(body),
+    });
+
     // Validate required fields
     if (!eventName || typeof eventName !== 'string' || !eventName.trim()) {
-      console.error('POST /api/events: Missing or invalid eventName', { eventName });
+      console.error('POST /api/events: Missing or invalid eventName', { 
+        eventName,
+        eventNameType: typeof eventName,
+        bodyKeys: Object.keys(body),
+      });
       return NextResponse.json(
         { error: 'Event name is required' },
         { status: 400 }
@@ -95,7 +110,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (!eventDate) {
-      console.error('POST /api/events: Missing eventDate');
+      console.error('POST /api/events: Missing eventDate', { 
+        eventDate,
+        eventDateType: typeof eventDate,
+        bodyKeys: Object.keys(body),
+      });
       return NextResponse.json(
         { error: 'Event date is required' },
         { status: 400 }
@@ -103,7 +122,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (!activities || !Array.isArray(activities) || activities.length === 0) {
-      console.error('POST /api/events: Missing or invalid activities', { activities });
+      console.error('POST /api/events: Missing or invalid activities', { 
+        activities,
+        activitiesType: typeof activities,
+        isArray: Array.isArray(activities),
+        length: activities?.length,
+        bodyKeys: Object.keys(body),
+      });
       return NextResponse.json(
         { error: 'At least one activity is required' },
         { status: 400 }

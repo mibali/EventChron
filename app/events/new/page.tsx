@@ -106,7 +106,7 @@ export default function NewEventPage() {
 
     setIsSaving(true);
     try {
-      const newEvent = await createEvent({
+      const eventData = {
         eventName: eventName.trim(),
         eventDate,
         logoUrl: logoUrl || undefined,
@@ -117,11 +117,29 @@ export default function NewEventPage() {
           isCompleted: false,
           isActive: false,
         })),
+      };
+
+      console.log('handleSave: Attempting to create event', {
+        eventName: eventData.eventName,
+        eventDate: eventData.eventDate,
+        activitiesCount: eventData.activities.length,
+        activities: eventData.activities.map(a => ({
+          name: a.activityName,
+          timeAllotted: a.timeAllotted,
+          timeAllottedType: typeof a.timeAllotted,
+        })),
       });
 
+      const newEvent = await createEvent(eventData);
+
+      console.log('handleSave: Event created successfully', { eventId: newEvent.id });
       router.push(`/events/${newEvent.id}`);
     } catch (error) {
-      console.error('Error creating event:', error);
+      console.error('handleSave: Error creating event', {
+        error,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorStack: error instanceof Error ? error.stack : undefined,
+      });
       alert('Failed to create event. Please try again.');
       setIsSaving(false);
     }
