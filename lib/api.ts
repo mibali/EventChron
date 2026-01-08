@@ -1,4 +1,4 @@
-import { Event, Activity } from './types';
+import { Event, Activity, TimerGradient } from './types';
 
 const API_BASE = '/api';
 
@@ -27,6 +27,18 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
 // Transform database event to client format
 function transformEvent(event: any): Event {
+  // Parse timerGradient if it's a JSON string
+  let timerGradient: TimerGradient | undefined;
+  if (event.timerGradient) {
+    try {
+      timerGradient = typeof event.timerGradient === 'string' 
+        ? JSON.parse(event.timerGradient) 
+        : event.timerGradient;
+    } catch {
+      timerGradient = undefined;
+    }
+  }
+
   return {
     id: event.id,
     eventName: event.eventName,
@@ -35,6 +47,7 @@ function transformEvent(event: any): Event {
       : new Date(event.eventDate).toISOString().split('T')[0],
     logoUrl: event.logoUrl || undefined,
     logoAlignment: event.logoAlignment || 'center',
+    timerGradient,
     activities: (event.activities || []).map((a: any) => ({
       id: a.id,
       activityName: a.activityName,
@@ -84,6 +97,7 @@ export async function createEvent(event: {
   eventDate: string;
   logoUrl?: string;
   logoAlignment: 'left' | 'center' | 'right';
+  timerGradient?: TimerGradient;
   activities: Omit<Activity, 'id'>[];
 }): Promise<Event> {
   const url = `${API_BASE}/events`;
@@ -124,6 +138,7 @@ export async function updateEvent(
     eventDate: string;
     logoUrl: string;
     logoAlignment: 'left' | 'center' | 'right';
+    timerGradient: TimerGradient;
     activities: Activity[];
   }>
 ): Promise<Event> {
@@ -182,6 +197,7 @@ export async function duplicateEvent(id: string): Promise<Event> {
     eventDate: event.eventDate,
     logoUrl: event.logoUrl || undefined,
     logoAlignment: event.logoAlignment,
+    timerGradient: event.timerGradient,
     activities: event.activities.map((a) => ({
       activityName: a.activityName,
       timeAllotted: a.timeAllotted,

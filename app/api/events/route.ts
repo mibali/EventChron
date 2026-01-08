@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { eventName, eventDate, logoUrl, logoAlignment, activities } = body;
+    const { eventName, eventDate, logoUrl, logoAlignment, timerGradient, activities } = body;
 
     console.log('POST /api/events: Request body received', {
       hasEventName: !!eventName,
@@ -258,6 +258,7 @@ export async function POST(request: NextRequest) {
           eventDate: parsedDate,
           logoUrl: logoUrl && typeof logoUrl === 'string' && logoUrl.trim() ? logoUrl.trim() : null,
           logoAlignment: finalLogoAlignment,
+          timerGradient: timerGradient ? JSON.stringify(timerGradient) : null,
           userId: session.user.id,
           activities: {
             create: activitiesData,

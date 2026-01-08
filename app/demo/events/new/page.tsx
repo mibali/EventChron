@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save, Upload } from 'lucide-react';
-import { Event, LogoAlignment } from '@/lib/types';
+import { Event, LogoAlignment, TimerGradient, GRADIENT_PRESETS } from '@/lib/types';
 import { generateId, compressImage } from '@/lib/utils';
 import ActivityForm from '@/components/ActivityForm';
+import GradientPicker from '@/components/GradientPicker';
 
 const DEMO_EVENTS_KEY = 'eventchron_demo_events';
 const MAX_DEMO_EVENTS = 5;
@@ -16,6 +17,7 @@ export default function DemoNewEventPage() {
   const [eventDate, setEventDate] = useState(new Date().toISOString().split('T')[0]);
   const [logoUrl, setLogoUrl] = useState<string>('');
   const [logoAlignment, setLogoAlignment] = useState<LogoAlignment>('center');
+  const [timerGradient, setTimerGradient] = useState<TimerGradient>(GRADIENT_PRESETS[0]);
   const [activities, setActivities] = useState<Event['activities']>([]);
 
   // Demo-specific storage functions
@@ -71,6 +73,7 @@ export default function DemoNewEventPage() {
         }
         if (imported.logoUrl) setLogoUrl(imported.logoUrl);
         if (imported.logoAlignment) setLogoAlignment(imported.logoAlignment);
+        if (imported.timerGradient) setTimerGradient(imported.timerGradient);
         if (imported.activities && Array.isArray(imported.activities)) {
           setActivities(imported.activities);
         }
@@ -131,6 +134,7 @@ export default function DemoNewEventPage() {
       eventDate,
       logoUrl,
       logoAlignment,
+      timerGradient,
       activities: activities.map(a => ({
         ...a,
         isCompleted: false,
@@ -232,6 +236,9 @@ export default function DemoNewEventPage() {
                 </div>
               </div>
             )}
+
+            {/* Timer Background Gradient */}
+            <GradientPicker value={timerGradient} onChange={setTimerGradient} />
 
             <ActivityForm activities={activities} onChange={setActivities} />
 

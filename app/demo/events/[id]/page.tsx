@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, Download, FileJson, FileSpreadsheet, CheckCircle2, ChevronLeft, ChevronRight, Maximize2, Minimize2, Edit2, Save, X } from 'lucide-react';
-import { Event, Activity } from '@/lib/types';
+import { Event, Activity, GRADIENT_PRESETS } from '@/lib/types';
 import { convertActivitiesToResults, exportToJSON, exportToCSV, downloadFile } from '@/lib/export';
 import Timer from '@/components/Timer';
 import EditableActivityList from '@/components/EditableActivityList';
 import { formatTimeReadable } from '@/lib/utils';
+import { gradientToCSS } from '@/components/GradientPicker';
 
 const DEMO_EVENTS_KEY = 'eventchron_demo_events';
 
@@ -237,8 +238,13 @@ export default function DemoEventPage() {
     }
   };
 
+  // Get the gradient CSS for the timer background
+  const timerBackgroundStyle = {
+    background: gradientToCSS(event.timerGradient || GRADIENT_PRESETS[0])
+  };
+
   return (
-    <div className="bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen" style={timerBackgroundStyle}>
       {/* Header */}
       <div className={`bg-white shadow-md p-4 md:p-6 ${isFullScreen ? 'hidden' : ''}`}>
         <div className="max-w-7xl mx-auto">
@@ -414,7 +420,10 @@ export default function DemoEventPage() {
             </div>
           </div>
         ) : currentActivity ? (
-          <div className={`${isFullScreen ? 'flex-1 flex flex-col items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100' : 'bg-white rounded-lg shadow-lg p-8 md:p-12'}`}>
+          <div 
+            className={`${isFullScreen ? 'flex-1 flex flex-col items-center justify-center' : 'bg-white rounded-lg shadow-lg p-8 md:p-12'}`}
+            style={isFullScreen ? timerBackgroundStyle : {}}
+          >
             {/* Full Screen Header */}
             {isFullScreen && (
               <div className="w-full bg-white shadow-md p-4 flex items-center justify-between">

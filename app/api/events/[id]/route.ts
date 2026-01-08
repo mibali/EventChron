@@ -69,7 +69,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     }
 
-    const { eventName, eventDate, logoUrl, logoAlignment, activities } = body;
+    const { eventName, eventDate, logoUrl, logoAlignment, timerGradient, activities } = body;
 
     // Build update data
     const updateData: any = {};
@@ -99,6 +99,10 @@ export async function PUT(
     if (logoAlignment !== undefined) {
       const validAlignments = ['left', 'center', 'right'];
       updateData.logoAlignment = validAlignments.includes(logoAlignment) ? logoAlignment : 'center';
+    }
+
+    if (timerGradient !== undefined) {
+      updateData.timerGradient = timerGradient ? JSON.stringify(timerGradient) : null;
     }
 
     // Use a single transaction for the entire operation

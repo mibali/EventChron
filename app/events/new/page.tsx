@@ -4,10 +4,11 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Save, Upload } from 'lucide-react';
-import { Event, LogoAlignment } from '@/lib/types';
+import { Event, LogoAlignment, TimerGradient, GRADIENT_PRESETS } from '@/lib/types';
 import { compressImage } from '@/lib/utils';
 import { createEvent } from '@/lib/api';
 import ActivityForm from '@/components/ActivityForm';
+import GradientPicker from '@/components/GradientPicker';
 
 export default function NewEventPage() {
   const router = useRouter();
@@ -16,6 +17,7 @@ export default function NewEventPage() {
   const [eventDate, setEventDate] = useState(new Date().toISOString().split('T')[0]);
   const [logoUrl, setLogoUrl] = useState<string>('');
   const [logoAlignment, setLogoAlignment] = useState<LogoAlignment>('center');
+  const [timerGradient, setTimerGradient] = useState<TimerGradient>(GRADIENT_PRESETS[0]);
   const [activities, setActivities] = useState<Event['activities']>([]);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -50,6 +52,7 @@ export default function NewEventPage() {
         }
         if (imported.logoUrl) setLogoUrl(imported.logoUrl);
         if (imported.logoAlignment) setLogoAlignment(imported.logoAlignment);
+        if (imported.timerGradient) setTimerGradient(imported.timerGradient);
         if (imported.activities && Array.isArray(imported.activities)) {
           setActivities(imported.activities);
         }
@@ -111,6 +114,7 @@ export default function NewEventPage() {
         eventDate,
         logoUrl: logoUrl || undefined,
         logoAlignment,
+        timerGradient,
         activities: activities.map(a => ({
           activityName: a.activityName,
           timeAllotted: a.timeAllotted,
@@ -228,6 +232,9 @@ export default function NewEventPage() {
                 </div>
               </div>
             )}
+
+            {/* Timer Background Gradient */}
+            <GradientPicker value={timerGradient} onChange={setTimerGradient} />
 
             <ActivityForm activities={activities} onChange={setActivities} />
 
