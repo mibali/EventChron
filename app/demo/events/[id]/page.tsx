@@ -195,6 +195,42 @@ export default function DemoEventPage() {
     setIsEventStarted(true);
   };
 
+  const handleNextActivity = () => {
+    if (!event) return;
+    
+    // Find next incomplete activity
+    const nextIndex = event.activities.findIndex((a, idx) => idx > currentActivityIndex && !a.isCompleted);
+    if (nextIndex >= 0) {
+      setCurrentActivityIndex(nextIndex);
+    }
+  };
+
+  const handleStartNextActivity = () => {
+    if (!event) return;
+    
+    // Find next incomplete activity
+    const nextIndex = event.activities.findIndex((a, idx) => idx > currentActivityIndex && !a.isCompleted);
+    if (nextIndex >= 0) {
+      setCurrentActivityIndex(nextIndex);
+      
+      // Start the next activity
+      const updatedActivities = event.activities.map((a, idx) => ({
+        ...a,
+        isActive: idx === nextIndex,
+      }));
+
+      const updatedEvent = {
+        ...event,
+        activities: updatedActivities,
+        updatedAt: new Date().toISOString(),
+      };
+
+      setEvent(updatedEvent);
+      saveDemoEvent(updatedEvent);
+      setIsEventStarted(true);
+    }
+  };
+
   const handleUpdateActivities = (updatedActivities: Activity[]) => {
     if (!event) return;
 
@@ -493,6 +529,9 @@ export default function DemoEventPage() {
                     isActive={currentActivity.isActive || false}
                     isFullScreen={isFullScreen}
                     backgroundStyle={timerBackgroundStyle}
+                    onNextActivity={handleNextActivity}
+                    onStartNext={handleStartNextActivity}
+                    hasNextActivity={event.activities.some((a, idx) => idx > currentActivityIndex && !a.isCompleted)}
                   />
                 </div>
               )}

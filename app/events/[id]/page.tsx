@@ -233,6 +233,44 @@ export default function EventPage() {
     }
   };
 
+  const handleNextActivity = () => {
+    if (!event) return;
+    
+    // Find next incomplete activity
+    const nextIndex = event.activities.findIndex((a, idx) => idx > currentActivityIndex && !a.isCompleted);
+    if (nextIndex >= 0) {
+      setCurrentActivityIndex(nextIndex);
+    }
+  };
+
+  const handleStartNextActivity = async () => {
+    if (!event) return;
+    
+    // Find next incomplete activity
+    const nextIndex = event.activities.findIndex((a, idx) => idx > currentActivityIndex && !a.isCompleted);
+    if (nextIndex >= 0) {
+      setCurrentActivityIndex(nextIndex);
+      
+      // Start the next activity
+      const updatedActivities = event.activities.map((a, idx) => ({
+        ...a,
+        isActive: idx === nextIndex,
+      }));
+
+      try {
+        const updatedEvent = await updateEvent(eventId, {
+          activities: updatedActivities,
+        });
+
+        setEvent(updatedEvent);
+        setIsEventStarted(true);
+      } catch (error) {
+        console.error('Error starting next activity:', error);
+        alert('Failed to start next activity. Please try again.');
+      }
+    }
+  };
+
   const handleUpdateActivities = async (updatedActivities: Activity[]) => {
     if (!event) return;
 
@@ -529,6 +567,9 @@ export default function EventPage() {
                     isActive={currentActivity.isActive || false}
                     isFullScreen={isFullScreen}
                     backgroundStyle={timerBackgroundStyle}
+                    onNextActivity={handleNextActivity}
+                    onStartNext={handleStartNextActivity}
+                    hasNextActivity={event.activities.some((a, idx) => idx > currentActivityIndex && !a.isCompleted)}
                   />
                 </div>
               )}
