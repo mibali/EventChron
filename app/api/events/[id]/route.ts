@@ -111,16 +111,40 @@ export async function PUT(
     });
 
     // Verify event belongs to user - use findUnique for ID lookup
-    const existingEvent = await prisma.event.findUnique({
-      where: {
-        id: eventId,
-      },
-    });
+    // Use a transaction to ensure atomicity and prevent race conditions
+    let existingEvent;
+    try {
+      existingEvent = await prisma.event.findUnique({
+        where: {
+          id: eventId,
+        },
+        select: {
+          id: true,
+          userId: true,
+          eventName: true,
+        },
+      });
+    } catch (dbError) {
+      console.error('PUT /api/events/[id]: Database error checking event existence', {
+        error: dbError,
+        eventId,
+        userId: session.user.id,
+      });
+      return NextResponse.json(
+        { error: 'Database error. Please try again.' },
+        { status: 500 }
+      );
+    }
 
     if (!existingEvent) {
       console.error('PUT /api/events/[id]: Event does not exist', { 
         eventId,
         userId: session.user.id,
+        // Try one more time to see if it's a timing issue
+        retryCheck: await prisma.event.findUnique({
+          where: { id: eventId },
+          select: { id: true },
+        }),
       });
       return NextResponse.json({ error: 'Event not found' }, { status: 404 });
     }
@@ -247,20 +271,8 @@ export async function PUT(
         }
       }
 
-      // Delete all existing activities and recreate
-      // This ensures proper ordering and handles additions/removals
-      try {
-        await prisma.activity.deleteMany({
-          where: { eventId: eventId },
-        });
-      } catch (deleteError) {
-        console.error('PUT /api/events/[id]: Error deleting activities', {
-          error: deleteError,
-          eventId: eventId,
-        });
-        throw deleteError;
-      }
-      
+      // Activities will be deleted and recreated within the transaction
+      // Don't delete them here - let the transaction handle it
       updateData.activities = {
         create: activities.map((activity: any, index: number) => ({
           activityName: activity.activityName.trim(),
@@ -275,21 +287,65 @@ export async function PUT(
       };
     }
 
-    // Update event
+    // Update event - use a transaction to ensure atomicity and prevent race conditions
     try {
-      const event = await prisma.event.update({
-        where: { id: eventId },
-        data: updateData,
-        include: {
-          activities: {
-            orderBy: { order: 'asc' },
+      // Use a transaction to ensure all operations are atomic
+      const event = await prisma.$transaction(async (tx) => {
+        // Verify event still exists and belongs to user within transaction
+        const eventCheck = await tx.event.findUnique({
+          where: { id: eventId },
+          select: { id: true, userId: true },
+        });
+
+        if (!eventCheck) {
+          console.error('PUT /api/events/[id]: Event does not exist in transaction', {
+            eventId,
+            userId: session.user.id,
+          });
+          throw new Error('Event not found');
+        }
+
+        if (eventCheck.userId !== session.user.id) {
+          console.error('PUT /api/events/[id]: Event does not belong to user in transaction', {
+            eventId,
+            eventUserId: eventCheck.userId,
+            requestUserId: session.user.id,
+          });
+          throw new Error('Event not found');
+        }
+
+        // If updating activities, delete them first within the transaction
+        if (updateData.activities) {
+          await tx.activity.deleteMany({
+            where: { eventId: eventId },
+          });
+        }
+
+        // Update the event within the transaction
+        return await tx.event.update({
+          where: { id: eventId },
+          data: updateData,
+          include: {
+            activities: {
+              orderBy: { order: 'asc' },
+            },
           },
-        },
+        });
+      }, {
+        timeout: 10000, // 10 second timeout
       });
 
       console.log('PUT /api/events/[id]: Event updated successfully', { eventId: event.id, userId: session.user.id });
       return NextResponse.json(event);
     } catch (dbError) {
+      // Handle transaction errors
+      if (dbError instanceof Error && dbError.message === 'Event not found') {
+        console.error('PUT /api/events/[id]: Event not found in transaction', {
+          eventId,
+          userId: session.user.id,
+        });
+        return NextResponse.json({ error: 'Event not found' }, { status: 404 });
+      }
       console.error('PUT /api/events/[id]: Database error', {
         error: dbError,
         message: dbError instanceof Error ? dbError.message : 'Unknown database error',
