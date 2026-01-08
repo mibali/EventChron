@@ -90,6 +90,9 @@ export default function Timer({
   // Use gradient background if provided, otherwise use status-based background
   const defaultBgColor = isOverTime ? 'bg-red-50' : isYellowState ? 'bg-yellow-50' : 'bg-green-50';
   const bgStyle = backgroundStyle || {};
+  
+  // Only apply gradient if backgroundStyle is provided, otherwise use default status colors
+  const shouldUseGradient = backgroundStyle && Object.keys(backgroundStyle).length > 0;
 
   // Show overlay when in yellow state (90% of time or over)
   useEffect(() => {
@@ -160,8 +163,8 @@ export default function Timer({
 
   return (
     <div 
-      className={`relative flex flex-col items-center justify-center ${isFullScreen ? 'space-y-12 p-12 w-full' : 'space-y-6 p-8 rounded-2xl'} ${backgroundStyle ? '' : defaultBgColor} transition-colors`}
-      style={bgStyle}
+      className={`relative flex flex-col items-center justify-center ${isFullScreen ? 'space-y-12 p-12 w-full' : 'space-y-6 p-8 rounded-2xl'} ${shouldUseGradient ? '' : defaultBgColor} transition-colors`}
+      style={shouldUseGradient ? bgStyle : {}}
       onMouseEnter={() => {
         if (isYellowState && isRunning) {
           setShowOverlay(true);

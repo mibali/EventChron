@@ -25,6 +25,7 @@ export default function DemoEventPage() {
   const [isEditingEvent, setIsEditingEvent] = useState(false);
   const [editEventName, setEditEventName] = useState('');
   const [editEventDate, setEditEventDate] = useState('');
+  const [allCompletedState, setAllCompletedState] = useState(false);
 
   const getDemoEvents = (): Event[] => {
     if (typeof window === 'undefined') return [];
@@ -129,7 +130,15 @@ export default function DemoEventPage() {
   const currentActivity = event.activities.length > 0 && validIndex < event.activities.length 
     ? event.activities[validIndex] 
     : null;
-  const allCompleted = event.activities.length > 0 && event.activities.every(a => a.isCompleted);
+  const allCompleted = allCompletedState || (event.activities.length > 0 && event.activities.every(a => a.isCompleted));
+
+  // Update allCompletedState when event changes
+  useEffect(() => {
+    if (event && event.activities.length > 0) {
+      const completed = event.activities.every(a => a.isCompleted);
+      setAllCompletedState(completed);
+    }
+  }, [event]);
 
   const handleActivityStop = (timeSpent: number) => {
     if (!event || !currentActivity) return;
@@ -157,6 +166,9 @@ export default function DemoEventPage() {
 
     // Check if all activities are now completed
     const allCompletedNow = updatedActivities.every(a => a.isCompleted);
+
+    // Update completion state immediately for instant UI update
+    setAllCompletedState(allCompletedNow);
 
     setEvent(updatedEvent);
     saveDemoEvent(updatedEvent);
@@ -282,10 +294,10 @@ export default function DemoEventPage() {
     }
   };
 
-  // Get the gradient CSS for the timer background
-  const timerBackgroundStyle = {
-    background: gradientToCSS(event.timerGradient || GRADIENT_PRESETS[0])
-  };
+  // Get the gradient CSS for the timer background (only if gradient is selected)
+  const timerBackgroundStyle = event.timerGradient ? {
+    background: gradientToCSS(event.timerGradient)
+  } : undefined;
 
   return (
     <div className="min-h-screen" style={timerBackgroundStyle}>

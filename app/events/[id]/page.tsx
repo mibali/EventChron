@@ -26,6 +26,7 @@ export default function EventPage() {
   const [isEditingEvent, setIsEditingEvent] = useState(false);
   const [editEventName, setEditEventName] = useState('');
   const [editEventDate, setEditEventDate] = useState('');
+  const [allCompletedState, setAllCompletedState] = useState(false);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -120,7 +121,15 @@ export default function EventPage() {
   const currentActivity = event.activities.length > 0 && validIndex < event.activities.length 
     ? event.activities[validIndex] 
     : null;
-  const allCompleted = event.activities.length > 0 && event.activities.every(a => a.isCompleted);
+  const allCompleted = allCompletedState || (event.activities.length > 0 && event.activities.every(a => a.isCompleted));
+
+  // Update allCompletedState when event changes
+  useEffect(() => {
+    if (event && event.activities.length > 0) {
+      const completed = event.activities.every(a => a.isCompleted);
+      setAllCompletedState(completed);
+    }
+  }, [event]);
 
   const handleActivityStop = async (timeSpent: number) => {
     if (!event || !currentActivity) return;
@@ -158,6 +167,9 @@ export default function EventPage() {
     // Check if all activities are now completed
     const allCompletedNow = updatedActivities.every(a => a.isCompleted);
     
+    // Update completion state immediately for instant UI update
+    setAllCompletedState(allCompletedNow);
+    
     setEvent(optimisticEvent);
     setIsEventStarted(true);
 
@@ -169,7 +181,6 @@ export default function EventPage() {
       }
     } else {
       // All activities completed - ensure we're not trying to show a specific activity
-      // The completion screen will show based on allCompleted check in render
       setCurrentActivityIndex(0); // Reset to 0 so we don't show an invalid activity
     }
 
@@ -324,10 +335,10 @@ export default function EventPage() {
     }
   };
 
-  // Get the gradient CSS for the timer background
-  const timerBackgroundStyle = {
-    background: gradientToCSS(event.timerGradient || GRADIENT_PRESETS[0])
-  };
+  // Get the gradient CSS for the timer background (only if gradient is selected)
+  const timerBackgroundStyle = event.timerGradient ? {
+    background: gradientToCSS(event.timerGradient)
+  } : undefined;
 
   return (
     <div className="min-h-screen" style={timerBackgroundStyle}>
