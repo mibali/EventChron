@@ -10,9 +10,10 @@ interface TimerProps {
   onStop: (timeSpent: number) => void;
   isActive: boolean;
   isFullScreen?: boolean;
+  backgroundStyle?: React.CSSProperties;
 }
 
-export default function Timer({ activity, onStop, isActive, isFullScreen = false }: TimerProps) {
+export default function Timer({ activity, onStop, isActive, isFullScreen = false, backgroundStyle }: TimerProps) {
   const [elapsed, setElapsed] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -69,10 +70,16 @@ export default function Timer({ activity, onStop, isActive, isFullScreen = false
 
   const isOverTime = elapsed > activity.timeAllotted;
   const timeColor = isOverTime ? 'text-red-600' : elapsed >= activity.timeAllotted * 0.9 ? 'text-yellow-600' : 'text-green-600';
-  const bgColor = isOverTime ? 'bg-red-50' : elapsed >= activity.timeAllotted * 0.9 ? 'bg-yellow-50' : 'bg-green-50';
+  
+  // Use gradient background if provided, otherwise use status-based background
+  const defaultBgColor = isOverTime ? 'bg-red-50' : elapsed >= activity.timeAllotted * 0.9 ? 'bg-yellow-50' : 'bg-green-50';
+  const bgStyle = backgroundStyle || {};
 
   return (
-    <div className={`flex flex-col items-center justify-center ${isFullScreen ? 'space-y-12 p-12 w-full' : 'space-y-6 p-8 rounded-2xl'} ${bgColor} transition-colors`}>
+    <div 
+      className={`flex flex-col items-center justify-center ${isFullScreen ? 'space-y-12 p-12 w-full' : 'space-y-6 p-8 rounded-2xl'} ${backgroundStyle ? '' : defaultBgColor} transition-colors`}
+      style={bgStyle}
+    >
       <div className={`font-mono font-bold ${timeColor} transition-colors drop-shadow-lg ${isFullScreen ? 'text-[20rem] xl:text-[25rem]' : 'text-7xl md:text-9xl lg:text-[12rem]'}`}>
         {formatTime(elapsed)}
       </div>

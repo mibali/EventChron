@@ -484,6 +484,7 @@ export default function DemoEventPage() {
                     onStop={handleActivityStop}
                     isActive={currentActivity.isActive || false}
                     isFullScreen={isFullScreen}
+                    backgroundStyle={timerBackgroundStyle}
                   />
                 </div>
               )}

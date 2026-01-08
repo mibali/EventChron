@@ -149,44 +149,53 @@ export default function EventPage() {
       return a;
     });
 
+    // Optimistic update: Update UI immediately for instant feedback
+    const optimisticEvent: Event = {
+      ...event,
+      activities: updatedActivities,
+    };
+    setEvent(optimisticEvent);
+    setIsEventStarted(true);
+
+    // Find next activity immediately
+    const nextIndex = updatedActivities.findIndex(a => !a.isCompleted);
+    if (nextIndex >= 0) {
+      setCurrentActivityIndex(nextIndex);
+    }
+
+    // Sync with server in the background (non-blocking)
     try {
-      console.log('handleActivityStop: Attempting to update event', {
+      console.log('handleActivityStop: Syncing with server', {
         eventId,
-        eventIdType: typeof eventId,
         currentActivityIndex,
         timeSpent,
         activitiesCount: updatedActivities.length,
-        eventExists: !!event,
       });
 
       const updatedEvent = await updateEvent(eventId, {
         activities: updatedActivities,
       });
 
-      console.log('handleActivityStop: Event updated successfully', {
+      console.log('handleActivityStop: Event synced successfully', {
         eventId: updatedEvent.id,
         activitiesCount: updatedEvent.activities.length,
       });
 
-      // Update state first
+      // Update with server response (in case server made any adjustments)
       setEvent(updatedEvent);
-
-      // Then find next activity using the updated event data
-      const nextIndex = updatedEvent.activities.findIndex(a => !a.isCompleted);
-      if (nextIndex >= 0) {
-        // Use setTimeout to ensure state has updated before changing index
-        setTimeout(() => {
-          setCurrentActivityIndex(nextIndex);
-        }, 0);
-      }
     } catch (error) {
-      console.error('handleActivityStop: Error updating event', {
+      console.error('handleActivityStop: Error syncing with server', {
         error,
         eventId,
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
         errorStack: error instanceof Error ? error.stack : undefined,
       });
-      alert('Failed to save activity time. Please try again.');
+      
+      // Revert to previous state on error
+      setEvent(event);
+      
+      // Show error but don't block the UI
+      alert('Failed to save activity time. The activity was stopped locally, but changes may not be saved. Please refresh the page.');
     }
   };
 
@@ -448,7 +457,6 @@ export default function EventPage() {
         ) : currentActivity ? (
           <div 
             className={`${isFullScreen ? 'flex-1 flex flex-col items-center justify-center' : 'bg-white rounded-lg shadow-lg p-8 md:p-12'}`}
-            style={isFullScreen ? timerBackgroundStyle : {}}
           >
             {/* Full Screen Header */}
             {isFullScreen && (
@@ -510,6 +518,7 @@ export default function EventPage() {
                     onStop={handleActivityStop}
                     isActive={currentActivity.isActive || false}
                     isFullScreen={isFullScreen}
+                    backgroundStyle={timerBackgroundStyle}
                   />
                 </div>
               )}
