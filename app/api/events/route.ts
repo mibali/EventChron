@@ -182,12 +182,15 @@ export async function POST(request: NextRequest) {
         );
       }
       
-      // Ensure it's a non-negative integer
+      // Ensure it's a non-negative integer (0 is allowed)
       const timeAllottedInt = Math.floor(Math.abs(timeAllottedValue));
-      if (timeAllottedInt < 0) {
-        console.error(`POST /api/events: Negative timeAllotted at index ${i}`, { timeAllotted: timeAllottedValue });
+      if (isNaN(timeAllottedInt) || timeAllottedInt < 0) {
+        console.error(`POST /api/events: Invalid timeAllotted at index ${i}`, { 
+          timeAllotted: timeAllottedValue,
+          timeAllottedInt,
+        });
         return NextResponse.json(
-          { error: `Activity at position ${i + 1} must have a non-negative time allotment` },
+          { error: `Activity at position ${i + 1} must have a valid non-negative time allotment` },
           { status: 400 }
         );
       }
