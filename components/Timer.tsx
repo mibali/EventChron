@@ -56,7 +56,14 @@ export default function Timer({ activity, onStop, isActive, isFullScreen = false
   }, [isRunning]);
 
   const handleStop = () => {
+    // Prevent double-stops
+    if (!isRunning) return;
+    
     setIsRunning(false);
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
     onStop(elapsed);
   };
 

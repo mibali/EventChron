@@ -124,32 +124,45 @@ export default function EventPage() {
   const handleActivityStop = async (timeSpent: number) => {
     if (!event || !currentActivity) return;
 
-    const updatedActivities = [...event.activities];
-    const activity = updatedActivities[currentActivityIndex];
-    
-    activity.timeSpent = timeSpent;
-    activity.isCompleted = true;
-    activity.isActive = false;
-
-    if (timeSpent > activity.timeAllotted) {
-      activity.extraTimeTaken = timeSpent - activity.timeAllotted;
-      activity.timeGained = 0;
-    } else {
-      activity.timeGained = activity.timeAllotted - timeSpent;
-      activity.extraTimeTaken = 0;
+    // Prevent multiple simultaneous stops
+    if (currentActivity.isCompleted) {
+      console.warn('Activity already completed, ignoring stop request');
+      return;
     }
+
+    // Create updated activities array using map to avoid mutation
+    const updatedActivities = event.activities.map((a, idx) => {
+      if (idx === currentActivityIndex) {
+        const extraTimeTaken = timeSpent > a.timeAllotted ? timeSpent - a.timeAllotted : 0;
+        const timeGained = timeSpent <= a.timeAllotted ? a.timeAllotted - timeSpent : 0;
+        
+        return {
+          ...a,
+          timeSpent,
+          extraTimeTaken,
+          timeGained,
+          isCompleted: true,
+          isActive: false,
+        };
+      }
+      return a;
+    });
 
     try {
       const updatedEvent = await updateEvent(eventId, {
         activities: updatedActivities,
       });
 
+      // Update state first
       setEvent(updatedEvent);
 
-      // Move to next activity if available
-      const nextIndex = updatedActivities.findIndex(a => !a.isCompleted);
+      // Then find next activity using the updated event data
+      const nextIndex = updatedEvent.activities.findIndex(a => !a.isCompleted);
       if (nextIndex >= 0) {
-        setCurrentActivityIndex(nextIndex);
+        // Use setTimeout to ensure state has updated before changing index
+        setTimeout(() => {
+          setCurrentActivityIndex(nextIndex);
+        }, 0);
       }
     } catch (error) {
       console.error('Error updating event:', error);

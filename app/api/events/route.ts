@@ -79,11 +79,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate activities
+    for (const activity of activities) {
+      if (!activity.activityName || typeof activity.timeAllotted !== 'number' || activity.timeAllotted < 0) {
+        return NextResponse.json(
+          { error: 'Invalid activity data. Each activity must have a name and valid time allotment.' },
+          { status: 400 }
+        );
+      }
+    }
+
     const event = await prisma.event.create({
       data: {
         eventName,
         eventDate: new Date(eventDate),
-        logoUrl,
+        logoUrl: logoUrl || null,
         logoAlignment: logoAlignment || 'center',
         userId: session.user.id,
         activities: {
@@ -104,8 +114,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(event, { status: 201 });
   } catch (error) {
     console.error('Error creating event:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { error: 'Failed to create event' },
+      { 
+        error: 'Failed to create event',
+        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined,
+      },
       { status: 500 }
     );
   }
