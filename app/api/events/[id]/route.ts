@@ -20,10 +20,10 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const event = await prisma.event.findFirst({
+    // Use findUnique for ID-based lookup (more efficient and correct)
+    const event = await prisma.event.findUnique({
       where: {
         id: eventId,
-        userId: session.user.id,
       },
       include: {
         activities: {
@@ -33,9 +33,19 @@ export async function GET(
     });
 
     if (!event) {
-      console.error('GET /api/events/[id]: Event not found', { 
+      console.error('GET /api/events/[id]: Event does not exist', { 
         eventId,
         userId: session.user.id,
+      });
+      return NextResponse.json({ error: 'Event not found' }, { status: 404 });
+    }
+
+    // Check if event belongs to the user
+    if (event.userId !== session.user.id) {
+      console.error('GET /api/events/[id]: Access denied - event belongs to different user', { 
+        eventId,
+        eventUserId: event.userId,
+        requestUserId: session.user.id,
       });
       return NextResponse.json({ error: 'Event not found' }, { status: 404 });
     }
@@ -100,21 +110,27 @@ export async function PUT(
       userIdsMatch: eventExists?.userId === session.user.id,
     });
 
-    // Verify event belongs to user
-    const existingEvent = await prisma.event.findFirst({
+    // Verify event belongs to user - use findUnique for ID lookup
+    const existingEvent = await prisma.event.findUnique({
       where: {
         id: eventId,
-        userId: session.user.id,
       },
     });
 
     if (!existingEvent) {
-      console.error('PUT /api/events/[id]: Event not found or access denied', { 
+      console.error('PUT /api/events/[id]: Event does not exist', { 
         eventId,
         userId: session.user.id,
-        eventExists: !!eventExists,
-        eventBelongsToUser: eventExists?.userId === session.user.id,
-        eventUserId: eventExists?.userId,
+      });
+      return NextResponse.json({ error: 'Event not found' }, { status: 404 });
+    }
+
+    // Check if event belongs to the user
+    if (existingEvent.userId !== session.user.id) {
+      console.error('PUT /api/events/[id]: Access denied - event belongs to different user', { 
+        eventId,
+        eventUserId: existingEvent.userId,
+        requestUserId: session.user.id,
       });
       return NextResponse.json({ error: 'Event not found' }, { status: 404 });
     }
@@ -235,12 +251,12 @@ export async function PUT(
       // This ensures proper ordering and handles additions/removals
       try {
         await prisma.activity.deleteMany({
-          where: { eventId: params.id },
+          where: { eventId: eventId },
         });
       } catch (deleteError) {
         console.error('PUT /api/events/[id]: Error deleting activities', {
           error: deleteError,
-          eventId: params.id,
+          eventId: eventId,
         });
         throw deleteError;
       }
@@ -262,7 +278,7 @@ export async function PUT(
     // Update event
     try {
       const event = await prisma.event.update({
-        where: { id: params.id },
+        where: { id: eventId },
         data: updateData,
         include: {
           activities: {
@@ -278,7 +294,7 @@ export async function PUT(
         error: dbError,
         message: dbError instanceof Error ? dbError.message : 'Unknown database error',
         stack: dbError instanceof Error ? dbError.stack : undefined,
-        eventId: params.id,
+        eventId: eventId,
         userId: session.user.id,
         updateData: JSON.stringify(updateData, null, 2),
       });
@@ -308,11 +324,13 @@ export async function PUT(
       throw dbError; // Re-throw to be caught by outer catch
     }
   } catch (error) {
+    const eventId = params?.id;
     console.error('PUT /api/events/[id]: Unexpected error', {
       error,
       message: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
-      eventId: params.id,
+      eventId: eventId,
+      params: params,
     });
     
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -341,20 +359,41 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Verify event belongs to user
-    const event = await prisma.event.findFirst({
+    const eventId = params?.id;
+    
+    if (!eventId || typeof eventId !== 'string') {
+      console.error('DELETE /api/events/[id]: Invalid event ID', { eventId, params });
+      return NextResponse.json({ error: 'Invalid event ID' }, { status: 400 });
+    }
+
+    // Use findUnique for ID-based lookup
+    const event = await prisma.event.findUnique({
       where: {
-        id: params.id,
-        userId: session.user.id,
+        id: eventId,
       },
+      select: { id: true, userId: true },
     });
 
     if (!event) {
+      console.error('DELETE /api/events/[id]: Event does not exist', { 
+        eventId,
+        userId: session.user.id,
+      });
+      return NextResponse.json({ error: 'Event not found' }, { status: 404 });
+    }
+
+    // Check if event belongs to the user
+    if (event.userId !== session.user.id) {
+      console.error('DELETE /api/events/[id]: Access denied - event belongs to different user', { 
+        eventId,
+        eventUserId: event.userId,
+        requestUserId: session.user.id,
+      });
       return NextResponse.json({ error: 'Event not found' }, { status: 404 });
     }
 
     await prisma.event.delete({
-      where: { id: params.id },
+      where: { id: eventId },
     });
 
     return NextResponse.json({ message: 'Event deleted' });
