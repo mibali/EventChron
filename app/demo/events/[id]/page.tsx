@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, Download, FileJson, FileSpreadsheet, CheckCircle2, ChevronLeft, ChevronRight, Maximize2, Minimize2, Edit2, Save, X } from 'lucide-react';
 import { Event, Activity, GRADIENT_PRESETS } from '@/lib/types';
@@ -25,7 +25,7 @@ export default function DemoEventPage() {
   const [isEditingEvent, setIsEditingEvent] = useState(false);
   const [editEventName, setEditEventName] = useState('');
   const [editEventDate, setEditEventDate] = useState('');
-  const [allCompletedState, setAllCompletedState] = useState(false);
+  const completionStateRef = useRef<boolean>(false);
 
   const getDemoEvents = (): Event[] => {
     if (typeof window === 'undefined') return [];
@@ -130,18 +130,14 @@ export default function DemoEventPage() {
   const currentActivity = event.activities.length > 0 && validIndex < event.activities.length 
     ? event.activities[validIndex] 
     : null;
-  const allCompleted = allCompletedState || (event.activities.length > 0 && event.activities.every(a => a.isCompleted));
-
-  // Compute completion status from activities
-  const completionStatus = useMemo(() => {
-    if (!event || event.activities.length === 0) return false;
-    return event.activities.every(a => a.isCompleted);
-  }, [event?.activities?.length, event?.activities?.map(a => a.isCompleted).join(',')]);
-
-  // Update allCompletedState when completion status changes
+  
+  // Compute completion status directly from event activities
+  const allCompleted = event.activities.length > 0 && event.activities.every(a => a.isCompleted);
+  
+  // Update ref when completion status changes (for tracking)
   useEffect(() => {
-    setAllCompletedState(completionStatus);
-  }, [completionStatus]);
+    completionStateRef.current = allCompleted;
+  }, [allCompleted]);
 
   const handleActivityStop = (timeSpent: number) => {
     if (!event || !currentActivity) return;
@@ -169,9 +165,6 @@ export default function DemoEventPage() {
 
     // Check if all activities are now completed
     const allCompletedNow = updatedActivities.every(a => a.isCompleted);
-
-    // Update completion state immediately for instant UI update
-    setAllCompletedState(allCompletedNow);
 
     setEvent(updatedEvent);
     saveDemoEvent(updatedEvent);
