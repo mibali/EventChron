@@ -121,17 +121,12 @@ export default function DemoEventPage() {
     );
   }
 
-  // Ensure currentActivityIndex is valid (only when activities length changes)
-  useEffect(() => {
-    if (event && event.activities.length > 0) {
-      setCurrentActivityIndex(prevIndex => {
-        const validIndex = Math.max(0, Math.min(prevIndex, event.activities.length - 1));
-        return validIndex;
-      });
-    }
-  }, [event?.activities?.length]); // Only depend on length, use functional update to avoid loops
-
-  const validIndex = Math.max(0, Math.min(currentActivityIndex, event.activities.length - 1));
+  // Calculate valid index - clamp to valid range (no state update needed, just use calculated value)
+  const validIndex = event.activities.length > 0 
+    ? Math.max(0, Math.min(currentActivityIndex, event.activities.length - 1))
+    : 0;
+  
+  // No useEffect needed - we use validIndex for rendering, which is always valid
 
   const currentActivity = event.activities.length > 0 && validIndex < event.activities.length 
     ? event.activities[validIndex] 
