@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, Download, FileJson, FileSpreadsheet, CheckCircle2, ChevronLeft, ChevronRight, Maximize2, Minimize2, Edit2, Save, X } from 'lucide-react';
 import { Event, Activity, GRADIENT_PRESETS } from '@/lib/types';
@@ -132,13 +132,16 @@ export default function DemoEventPage() {
     : null;
   const allCompleted = allCompletedState || (event.activities.length > 0 && event.activities.every(a => a.isCompleted));
 
-  // Update allCompletedState when event changes
+  // Compute completion status from activities
+  const completionStatus = useMemo(() => {
+    if (!event || event.activities.length === 0) return false;
+    return event.activities.every(a => a.isCompleted);
+  }, [event?.activities?.length, event?.activities?.map(a => a.isCompleted).join(',')]);
+
+  // Update allCompletedState when completion status changes
   useEffect(() => {
-    if (event && event.activities.length > 0) {
-      const completed = event.activities.every(a => a.isCompleted);
-      setAllCompletedState(completed);
-    }
-  }, [event]);
+    setAllCompletedState(completionStatus);
+  }, [completionStatus]);
 
   const handleActivityStop = (timeSpent: number) => {
     if (!event || !currentActivity) return;

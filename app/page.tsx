@@ -51,16 +51,16 @@ export default function LandingPage() {
             <Link href="/" className="flex items-center">
               <h1 className="text-2xl font-bold text-indigo-600 hover:text-indigo-700 transition-colors cursor-pointer">
                 EventChron
-              </h1>
+          </h1>
             </Link>
             <div className="flex items-center gap-4">
               {session ? (
-                <Link
+          <Link
                   href="/dashboard"
                   className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
-                >
+          >
                   Dashboard
-                </Link>
+          </Link>
               ) : (
                 <Link
                   href="/login"
@@ -111,7 +111,7 @@ export default function LandingPage() {
           <p className="text-xl text-gray-600">
             Powerful features to manage your events professionally
           </p>
-        </div>
+              </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {features.map((feature, index) => (
             <div
@@ -125,7 +125,7 @@ export default function LandingPage() {
               <p className="text-gray-600">{feature.description}</p>
             </div>
           ))}
-        </div>
+            </div>
       </section>
 
       {/* How It Works */}
@@ -166,7 +166,7 @@ export default function LandingPage() {
               </p>
             </div>
           </div>
-        </div>
+          </div>
       </section>
 
       {/* Pricing Section */}
@@ -223,14 +223,14 @@ export default function LandingPage() {
                 <span>Priority support</span>
               </li>
             </ul>
-            <button
+                  <button
               disabled
               className="block w-full text-center bg-white/20 hover:bg-white/30 text-white font-semibold py-3 px-4 rounded-lg transition-colors cursor-not-allowed opacity-50"
             >
               Coming Soon
-            </button>
-          </div>
-        </div>
+                  </button>
+                </div>
+              </div>
       </section>
 
       {/* CTA Section */}
@@ -250,14 +250,14 @@ export default function LandingPage() {
               Get Started
               <ArrowRight className="w-5 h-5" />
             </Link>
-            <button
+                  <button
               onClick={() => router.push('/demo')}
               className="inline-flex items-center justify-center gap-2 bg-indigo-700 hover:bg-indigo-800 text-white font-semibold py-3 px-8 rounded-lg border-2 border-white/20 transition-colors text-lg"
-            >
+                  >
               Try Demo
-            </button>
-          </div>
-        </div>
+                  </button>
+                </div>
+              </div>
       </section>
     </div>
   );

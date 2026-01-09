@@ -17,10 +17,10 @@ export default function RootLayout({
     <html lang="en">
       <body className="antialiased flex flex-col min-h-screen">
         <SessionProvider>
-          <main className="flex-1 overflow-auto">
-            {children}
-          </main>
-          <Footer />
+        <main className="flex-1 overflow-auto">
+          {children}
+        </main>
+        <Footer />
         </SessionProvider>
       </body>
     </html>
