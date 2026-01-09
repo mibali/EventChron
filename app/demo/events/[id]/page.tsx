@@ -121,11 +121,17 @@ export default function DemoEventPage() {
     );
   }
 
-  // Ensure currentActivityIndex is valid
+  // Ensure currentActivityIndex is valid (use useEffect to avoid render-time state updates)
+  useEffect(() => {
+    if (event && event.activities.length > 0) {
+      const validIndex = Math.max(0, Math.min(currentActivityIndex, event.activities.length - 1));
+      if (validIndex !== currentActivityIndex) {
+        setCurrentActivityIndex(validIndex);
+      }
+    }
+  }, [event?.activities?.length, currentActivityIndex]);
+
   const validIndex = Math.max(0, Math.min(currentActivityIndex, event.activities.length - 1));
-  if (validIndex !== currentActivityIndex && event.activities.length > 0) {
-    setCurrentActivityIndex(validIndex);
-  }
 
   const currentActivity = event.activities.length > 0 && validIndex < event.activities.length 
     ? event.activities[validIndex] 
@@ -134,10 +140,8 @@ export default function DemoEventPage() {
   // Compute completion status directly from event activities
   const allCompleted = event.activities.length > 0 && event.activities.every(a => a.isCompleted);
   
-  // Update ref when completion status changes (for tracking)
-  useEffect(() => {
-    completionStateRef.current = allCompleted;
-  }, [allCompleted]);
+  // Update ref for tracking (no useEffect needed - just update it directly)
+  completionStateRef.current = allCompleted;
 
   const handleActivityStop = (timeSpent: number) => {
     if (!event || !currentActivity) return;
