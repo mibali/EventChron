@@ -30,6 +30,8 @@ export default function EventPage() {
   const [isStartingActivity, setIsStartingActivity] = useState(false);
   const [isStoppingActivity, setIsStoppingActivity] = useState(false);
   const [isUpdatingActivities, setIsUpdatingActivities] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
+  const [failedUpdates, setFailedUpdates] = useState<Array<{ type: string; data: any; retries: number }>>([]);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -47,6 +49,65 @@ export default function EventPage() {
       setIsUpdatingActivities(false);
     };
   }, [eventId, status, router]);
+
+  // Retry failed updates
+  useEffect(() => {
+    if (failedUpdates.length === 0) {
+      if (syncStatus === 'error') {
+        setSyncStatus('synced');
+      }
+      return;
+    }
+
+    const retryFailedUpdates = async () => {
+      const updatesToRetry = failedUpdates.filter(u => u.retries < 3);
+      if (updatesToRetry.length === 0) {
+        // All updates exceeded retry limit - clear queue
+        setFailedUpdates([]);
+        setSyncStatus('error');
+        return;
+      }
+
+      setSyncStatus('syncing');
+
+      const updatedQueue: typeof failedUpdates = [];
+      
+      for (const update of updatesToRetry) {
+        try {
+          if (update.type === 'startActivity' || update.type === 'stopActivity' || update.type === 'skipActivity') {
+            await updateActivity(update.data.eventId, update.data.activityId, {
+              ...(update.data.isActive !== undefined && { isActive: update.data.isActive }),
+              ...(update.data.isCompleted !== undefined && { isCompleted: update.data.isCompleted }),
+              ...(update.data.timeSpent !== undefined && { timeSpent: update.data.timeSpent }),
+              ...(update.data.extraTimeTaken !== undefined && { extraTimeTaken: update.data.extraTimeTaken }),
+              ...(update.data.timeGained !== undefined && { timeGained: update.data.timeGained }),
+            });
+            
+            // Success - don't add back to queue
+            console.log('Retry successful for', update.type);
+          }
+        } catch (error) {
+          // Increment retry count and keep in queue
+          updatedQueue.push({ ...update, retries: update.retries + 1 });
+          console.warn('Retry failed for', update.type, 'attempt', update.retries + 1);
+        }
+      }
+
+      // Update queue with remaining failed updates
+      setFailedUpdates(updatedQueue);
+
+      // Update sync status
+      if (updatedQueue.length === 0) {
+        setSyncStatus('synced');
+      } else {
+        setSyncStatus('error');
+      }
+    };
+
+    // Retry after 2 seconds
+    const timeout = setTimeout(retryFailedUpdates, 2000);
+    return () => clearTimeout(timeout);
+  }, [failedUpdates, syncStatus]);
 
   const loadEvent = async () => {
     try {
@@ -155,6 +216,7 @@ export default function EventPage() {
 
     // Mark as stopping to prevent race conditions
     setIsStoppingActivity(true);
+    setSyncStatus('syncing');
 
     // Calculate time metrics
     const extraTimeTaken = timeSpent > currentActivity.timeAllotted ? timeSpent - currentActivity.timeAllotted : 0;
@@ -224,6 +286,7 @@ export default function EventPage() {
 
       // Update with server response (in case server made any adjustments)
       setEvent(updatedEvent);
+      setSyncStatus('synced');
     } catch (error) {
       console.error('handleActivityStop: Error syncing with server', {
         error,
@@ -232,10 +295,25 @@ export default function EventPage() {
         errorStack: error instanceof Error ? error.stack : undefined,
       });
       
-      // Revert to previous state on error - but keep the optimistic update since timer already stopped
-      // The user saw the activity stop, so we keep that state but warn them
-      console.error('handleActivityStop: Failed to sync with server, keeping optimistic update');
+      // Set error status
+      setSyncStatus('error');
       
+      // Queue for retry
+      setFailedUpdates(prev => [...prev, {
+        type: 'stopActivity',
+        data: {
+          eventId,
+          activityId: currentActivity.id,
+          timeSpent,
+          extraTimeTaken,
+          timeGained,
+          isCompleted: true,
+          isActive: false,
+        },
+        retries: 0,
+      }]);
+      
+      // Keep optimistic update since timer already stopped - user saw it stop
       // Show error but don't block the UI
       alert('Failed to save activity time. The activity was stopped locally, but changes may not be saved. Please refresh the page.');
     } finally {
@@ -267,6 +345,7 @@ export default function EventPage() {
 
     // Mark as starting to prevent race conditions
     setIsStartingActivity(true);
+    setSyncStatus('syncing');
 
     // Optimistic update: Update UI immediately
     const optimisticActivities = event.activities.map((a, idx) => ({
@@ -300,14 +379,32 @@ export default function EventPage() {
 
       // Update with server response
       setEvent(updatedEvent);
+      setSyncStatus('synced');
+      // Update sync status
+      setSyncStatus('synced');
     } catch (error) {
       console.error('Error starting activity:', {
         error,
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
         eventId,
         currentActivityIndex,
-        activitiesCount: updatedActivities.length,
+        activityId: currentActivity.id,
       });
+      
+      // Set error status
+      setSyncStatus('error');
+      
+      // Queue for retry
+      setFailedUpdates(prev => [...prev, {
+        type: 'startActivity',
+        data: { eventId, activityId: currentActivity.id, isActive: true },
+        retries: 0,
+      }]);
+      
+      // Revert optimistic update on error
+      setEvent(event);
+      setIsEventStarted(false);
+      
       alert(
         'Failed to start activity. Please try again.\n\n' +
         'If the problem persists, you can:\n' +
@@ -315,8 +412,6 @@ export default function EventPage() {
         '2. Navigate to another activity and come back later\n' +
         '3. Refresh the page and try again'
       );
-      // Don't update state on error - keep previous state
-      // User can still navigate to other activities or skip this one
     } finally {
       // Always reset the flag
       setIsStartingActivity(false);
@@ -342,6 +437,8 @@ export default function EventPage() {
     );
     
     if (!confirmed) return;
+
+    setSyncStatus('syncing');
 
     // Optimistic update: Mark activity as completed (skipped) without time tracking
     const optimisticActivities = event.activities.map((a, idx) => {
@@ -389,8 +486,23 @@ export default function EventPage() {
       });
 
       setEvent(updatedEvent);
+      setSyncStatus('synced');
     } catch (error) {
       console.error('Error skipping activity:', error);
+      setSyncStatus('error');
+      
+      // Queue for retry
+      setFailedUpdates(prev => [...prev, {
+        type: 'skipActivity',
+        data: {
+          eventId,
+          activityId: currentActivity.id,
+          isCompleted: true,
+          isActive: false,
+        },
+        retries: 0,
+      }]);
+      
       alert('Failed to skip activity. The activity was skipped locally, but changes may not be saved. Please refresh the page.');
       // Keep optimistic update - user already saw the skip
     }
@@ -422,8 +534,8 @@ export default function EventPage() {
 
       // Mark as starting to prevent race conditions
       setIsStartingActivity(true);
+      setSyncStatus('syncing');
       
-      const nextActivity = event.activities[nextIndex];
       setCurrentActivityIndex(nextIndex);
       
       // Optimistic update: Update UI immediately
@@ -458,6 +570,7 @@ export default function EventPage() {
 
         // Update with server response
         setEvent(updatedEvent);
+        setSyncStatus('synced');
       } catch (error) {
         console.error('Error starting next activity:', {
           error,
@@ -466,6 +579,16 @@ export default function EventPage() {
           activityId: nextActivity.id,
           nextIndex,
         });
+        
+        setSyncStatus('error');
+        
+        // Queue for retry
+        setFailedUpdates(prev => [...prev, {
+          type: 'startActivity',
+          data: { eventId, activityId: nextActivity.id, isActive: true },
+          retries: 0,
+        }]);
+        
         alert('Failed to start next activity. Please try again.');
         // Revert index change on error
         setCurrentActivityIndex(currentActivityIndex);
@@ -489,6 +612,7 @@ export default function EventPage() {
 
     // Mark as updating to prevent race conditions
     setIsUpdatingActivities(true);
+    setSyncStatus('syncing');
 
     // Ensure proper data structure (no id, correct types for all fields)
     const activitiesToSend = updatedActivities.map((a) => ({
@@ -507,6 +631,7 @@ export default function EventPage() {
       });
 
       setEvent(updatedEvent);
+      setSyncStatus('synced');
       
       // Ensure currentActivityIndex is valid after update
       if (updatedActivities.length === 0) {
@@ -524,6 +649,7 @@ export default function EventPage() {
       }
     } catch (error) {
       console.error('Error updating activities:', error);
+      setSyncStatus('error');
       alert('Failed to update activities. Please try again.');
       // Don't update state on error - keep previous state
     } finally {
@@ -574,6 +700,33 @@ export default function EventPage() {
               Back to Events
             </button>
             <div className="flex items-center gap-2">
+              {/* Sync Status Indicator */}
+              {syncStatus !== 'synced' && (
+                <div 
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${
+                    syncStatus === 'syncing' 
+                      ? 'bg-blue-100 text-blue-700' 
+                      : 'bg-red-100 text-red-700'
+                  }`}
+                  title={
+                    syncStatus === 'syncing' 
+                      ? 'Syncing changes with server...' 
+                      : `Sync error. ${failedUpdates.length} update(s) queued for retry.`
+                  }
+                >
+                  {syncStatus === 'syncing' ? (
+                    <>
+                      <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" />
+                      Syncing...
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-2 h-2 bg-red-600 rounded-full" />
+                      Sync Error
+                    </>
+                  )}
+                </div>
+              )}
               {!allCompleted && currentActivity && (
                 <button
                   onClick={() => setIsFullScreen(!isFullScreen)}

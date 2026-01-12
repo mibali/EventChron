@@ -93,4 +93,7 @@ model Activity {
   event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
   
   @@index([eventId])
+  @@index([eventId, order])        // For ordered queries (finding next activity)
+  @@index([eventId, isCompleted])  // For finding incomplete activities
+  @@index([eventId, isActive])     // For finding active activity
 }
