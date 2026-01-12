@@ -184,7 +184,16 @@ export default function DemoEventPage() {
     if (!event || !currentActivity) return;
     
     // Don't allow starting already completed activities
-    if (currentActivity.isCompleted) return;
+    if (currentActivity.isCompleted) {
+      console.warn('Cannot start already completed activity');
+      return;
+    }
+
+    // Don't allow starting if activity is already active
+    if (currentActivity.isActive) {
+      console.warn('Activity is already active');
+      return;
+    }
 
     const updatedActivities = event.activities.map((a, idx) => ({
       ...a,

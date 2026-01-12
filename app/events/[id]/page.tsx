@@ -27,6 +27,9 @@ export default function EventPage() {
   const [editEventName, setEditEventName] = useState('');
   const [editEventDate, setEditEventDate] = useState('');
   const completionStateRef = useRef<boolean>(false);
+  const [isStartingActivity, setIsStartingActivity] = useState(false);
+  const [isStoppingActivity, setIsStoppingActivity] = useState(false);
+  const [isUpdatingActivities, setIsUpdatingActivities] = useState(false);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -36,6 +39,13 @@ export default function EventPage() {
     if (status === 'authenticated') {
       loadEvent();
     }
+
+    // Cleanup on unmount - reset loading states
+    return () => {
+      setIsStartingActivity(false);
+      setIsStoppingActivity(false);
+      setIsUpdatingActivities(false);
+    };
   }, [eventId, status, router]);
 
   const loadEvent = async () => {
@@ -133,10 +143,18 @@ export default function EventPage() {
     if (!event || !currentActivity) return;
 
     // Prevent multiple simultaneous stops
+    if (isStoppingActivity) {
+      console.warn('Stop already in progress, ignoring duplicate stop request');
+      return;
+    }
+
     if (currentActivity.isCompleted) {
       console.warn('Activity already completed, ignoring stop request');
       return;
     }
+
+    // Mark as stopping to prevent race conditions
+    setIsStoppingActivity(true);
 
     // Create updated activities array using map to avoid mutation
     // Ensure proper data structure (no id, correct types for all fields)
@@ -218,19 +236,41 @@ export default function EventPage() {
         errorStack: error instanceof Error ? error.stack : undefined,
       });
       
-      // Revert to previous state on error
-      setEvent(event);
+      // Revert to previous state on error - but keep the optimistic update since timer already stopped
+      // The user saw the activity stop, so we keep that state but warn them
+      console.error('handleActivityStop: Failed to sync with server, keeping optimistic update');
       
       // Show error but don't block the UI
       alert('Failed to save activity time. The activity was stopped locally, but changes may not be saved. Please refresh the page.');
+    } finally {
+      // Always reset the flag
+      setIsStoppingActivity(false);
     }
   };
 
   const handleStartActivity = async () => {
     if (!event || !currentActivity) return;
     
+    // Prevent multiple simultaneous start requests
+    if (isStartingActivity) {
+      console.warn('Start already in progress, ignoring duplicate start request');
+      return;
+    }
+    
     // Don't allow starting already completed activities
-    if (currentActivity.isCompleted) return;
+    if (currentActivity.isCompleted) {
+      console.warn('Cannot start already completed activity');
+      return;
+    }
+
+    // Don't allow starting if activity is already active
+    if (currentActivity.isActive) {
+      console.warn('Activity is already active');
+      return;
+    }
+
+    // Mark as starting to prevent race conditions
+    setIsStartingActivity(true);
 
     // Map activities with proper data structure (no id, ensure all fields are correct types)
     const updatedActivities = event.activities.map((a, idx) => ({
@@ -270,6 +310,10 @@ export default function EventPage() {
         activitiesCount: updatedActivities.length,
       });
       alert('Failed to start activity. Please try again.');
+      // Don't update state on error - keep previous state
+    } finally {
+      // Always reset the flag
+      setIsStartingActivity(false);
     }
   };
 
@@ -286,9 +330,30 @@ export default function EventPage() {
   const handleStartNextActivity = async () => {
     if (!event) return;
     
+    // Prevent multiple simultaneous start requests
+    if (isStartingActivity) {
+      console.warn('Start already in progress, ignoring duplicate start request');
+      return;
+    }
+
     // Find next incomplete activity
     const nextIndex = event.activities.findIndex((a, idx) => idx > currentActivityIndex && !a.isCompleted);
     if (nextIndex >= 0) {
+      const nextActivity = event.activities[nextIndex];
+      
+      // Don't allow starting if next activity is already active or completed
+      if (nextActivity.isActive) {
+        console.warn('Next activity is already active');
+        return;
+      }
+      if (nextActivity.isCompleted) {
+        console.warn('Next activity is already completed');
+        return;
+      }
+
+      // Mark as starting to prevent race conditions
+      setIsStartingActivity(true);
+      
       setCurrentActivityIndex(nextIndex);
       
       // Start the next activity - map with proper data structure
@@ -329,12 +394,26 @@ export default function EventPage() {
           activitiesCount: updatedActivities.length,
         });
         alert('Failed to start next activity. Please try again.');
+        // Revert index change on error
+        setCurrentActivityIndex(currentActivityIndex);
+      } finally {
+        // Always reset the flag
+        setIsStartingActivity(false);
       }
     }
   };
 
   const handleUpdateActivities = async (updatedActivities: Activity[]) => {
     if (!event) return;
+
+    // Prevent multiple simultaneous update requests
+    if (isUpdatingActivities) {
+      console.warn('Update already in progress, ignoring duplicate update request');
+      return;
+    }
+
+    // Mark as updating to prevent race conditions
+    setIsUpdatingActivities(true);
 
     // Ensure proper data structure (no id, correct types for all fields)
     const activitiesToSend = updatedActivities.map((a) => ({
@@ -371,6 +450,10 @@ export default function EventPage() {
     } catch (error) {
       console.error('Error updating activities:', error);
       alert('Failed to update activities. Please try again.');
+      // Don't update state on error - keep previous state
+    } finally {
+      // Always reset the flag
+      setIsUpdatingActivities(false);
     }
   };
 
@@ -627,9 +710,10 @@ export default function EventPage() {
                   </div>
                   <button
                     onClick={handleStartActivity}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-4 px-8 rounded-lg shadow-lg transition-colors text-lg"
+                    disabled={isStartingActivity || currentActivity.isActive}
+                    className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-4 px-8 rounded-lg shadow-lg transition-colors text-lg"
                   >
-                    Start Activity
+                    {isStartingActivity ? 'Starting...' : 'Start Activity'}
                   </button>
                 </div>
               ) : (
