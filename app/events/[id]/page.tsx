@@ -309,8 +309,15 @@ export default function EventPage() {
         currentActivityIndex,
         activitiesCount: updatedActivities.length,
       });
-      alert('Failed to start activity. Please try again.');
+      alert(
+        'Failed to start activity. Please try again.\n\n' +
+        'If the problem persists, you can:\n' +
+        '1. Skip this activity and continue with the next one\n' +
+        '2. Navigate to another activity and come back later\n' +
+        '3. Refresh the page and try again'
+      );
       // Don't update state on error - keep previous state
+      // User can still navigate to other activities or skip this one
     } finally {
       // Always reset the flag
       setIsStartingActivity(false);
@@ -324,6 +331,69 @@ export default function EventPage() {
     const nextIndex = event.activities.findIndex((a, idx) => idx > currentActivityIndex && !a.isCompleted);
     if (nextIndex >= 0) {
       setCurrentActivityIndex(nextIndex);
+    }
+  };
+
+  const handleSkipActivity = async () => {
+    if (!event || !currentActivity) return;
+    
+    // Confirm skip action
+    const confirmed = confirm(
+      `Skip "${currentActivity.activityName}"? This will mark it as completed without tracking time. You can still navigate back to it later.`
+    );
+    
+    if (!confirmed) return;
+
+    // Mark activity as completed (skipped) without time tracking
+    const updatedActivities = event.activities.map((a, idx) => {
+      if (idx === currentActivityIndex) {
+        return {
+          activityName: a.activityName,
+          timeAllotted: a.timeAllotted,
+          timeSpent: a.timeSpent ?? null,
+          extraTimeTaken: a.extraTimeTaken ?? null,
+          timeGained: a.timeGained ?? null,
+          isCompleted: true, // Mark as completed (skipped)
+          isActive: false,
+        };
+      }
+      return {
+        activityName: a.activityName,
+        timeAllotted: a.timeAllotted,
+        timeSpent: a.timeSpent ?? null,
+        extraTimeTaken: a.extraTimeTaken ?? null,
+        timeGained: a.timeGained ?? null,
+        isCompleted: a.isCompleted ?? false,
+        isActive: a.isActive ?? false,
+      };
+    });
+
+    // Optimistic update
+    const optimisticEvent: Event = {
+      ...event,
+      activities: updatedActivities,
+    };
+    setEvent(optimisticEvent);
+
+    // Find next incomplete activity
+    const nextIndex = updatedActivities.findIndex(a => !a.isCompleted);
+    if (nextIndex >= 0) {
+      setCurrentActivityIndex(nextIndex);
+    } else {
+      // All activities completed
+      setCurrentActivityIndex(0);
+    }
+
+    // Sync with server
+    try {
+      const updatedEvent = await updateEvent(eventId, {
+        activities: updatedActivities,
+      });
+      setEvent(updatedEvent);
+    } catch (error) {
+      console.error('Error skipping activity:', error);
+      alert('Failed to skip activity. The activity was skipped locally, but changes may not be saved. Please refresh the page.');
+      // Keep optimistic update - user already saw the skip
     }
   };
 
@@ -733,7 +803,7 @@ export default function EventPage() {
 
               {/* Navigation Controls */}
               {currentActivity && !currentActivity.isActive && !isFullScreen && (
-                <div className="flex justify-center gap-4 mt-6">
+                <div className="flex justify-center gap-4 mt-6 flex-wrap">
                   <button
                     onClick={() => {
                       const prevIndex = currentActivityIndex > 0 ? currentActivityIndex - 1 : 0;
@@ -745,6 +815,15 @@ export default function EventPage() {
                     <ChevronLeft className="w-5 h-5" />
                     Previous
                   </button>
+                  {!currentActivity.isCompleted && (
+                    <button
+                      onClick={handleSkipActivity}
+                      className="flex items-center gap-2 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold rounded-lg transition-colors"
+                      title="Skip this activity (mark as completed without tracking time)"
+                    >
+                      Skip Activity
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       const nextIndex = currentActivityIndex < event.activities.length - 1 
