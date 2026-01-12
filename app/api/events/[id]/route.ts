@@ -49,20 +49,21 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  try {
-    const eventId = params?.id;
+  const eventId = params?.id;
+  let session = null;
+  let body: any = null;
 
+  try {
     if (!eventId) {
       return NextResponse.json({ error: 'Invalid event ID' }, { status: 400 });
     }
 
-    const session = await auth();
+    session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Parse request body
-    let body;
     try {
       body = await request.json();
     } catch {
