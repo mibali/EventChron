@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { ArrowLeft, Download, FileJson, FileSpreadsheet, CheckCircle2, ChevronLeft, ChevronRight, Maximize2, Minimize2, Edit2, Save, X } from 'lucide-react';
 import { Event, Activity, GRADIENT_PRESETS } from '@/lib/types';
-import { getEventById, updateEvent } from '@/lib/api';
+import { getEventById, updateEvent, updateActivity } from '@/lib/api';
 import { convertActivitiesToResults, exportToJSON, exportToCSV, downloadFile } from '@/lib/export';
 import Timer from '@/components/Timer';
 import EditableActivityList from '@/components/EditableActivityList';
@@ -156,16 +156,15 @@ export default function EventPage() {
     // Mark as stopping to prevent race conditions
     setIsStoppingActivity(true);
 
-    // Create updated activities array using map to avoid mutation
-    // Ensure proper data structure (no id, correct types for all fields)
-    const updatedActivities = event.activities.map((a, idx) => {
+    // Calculate time metrics
+    const extraTimeTaken = timeSpent > currentActivity.timeAllotted ? timeSpent - currentActivity.timeAllotted : 0;
+    const timeGained = timeSpent <= currentActivity.timeAllotted ? currentActivity.timeAllotted - timeSpent : 0;
+
+    // Optimistic update: Update UI immediately for instant feedback
+    const optimisticActivities = event.activities.map((a, idx) => {
       if (idx === currentActivityIndex) {
-        const extraTimeTaken = timeSpent > a.timeAllotted ? timeSpent - a.timeAllotted : 0;
-        const timeGained = timeSpent <= a.timeAllotted ? a.timeAllotted - timeSpent : 0;
-        
         return {
-          activityName: a.activityName,
-          timeAllotted: a.timeAllotted,
+          ...a,
           timeSpent,
           extraTimeTaken,
           timeGained,
@@ -173,33 +172,23 @@ export default function EventPage() {
           isActive: false,
         };
       }
-      // Return other activities with proper structure
-      return {
-        activityName: a.activityName,
-        timeAllotted: a.timeAllotted,
-        timeSpent: a.timeSpent ?? null,
-        extraTimeTaken: a.extraTimeTaken ?? null,
-        timeGained: a.timeGained ?? null,
-        isCompleted: a.isCompleted ?? false,
-        isActive: a.isActive ?? false,
-      };
+      return a;
     });
-
-    // Optimistic update: Update UI immediately for instant feedback
+    
     const optimisticEvent: Event = {
       ...event,
-      activities: updatedActivities,
+      activities: optimisticActivities,
     };
     
     // Check if all activities are now completed
-    const allCompletedNow = updatedActivities.every(a => a.isCompleted);
+    const allCompletedNow = optimisticActivities.every(a => a.isCompleted);
     
     setEvent(optimisticEvent);
     setIsEventStarted(true);
 
     // Find next activity immediately (only if not all completed)
     if (!allCompletedNow) {
-      const nextIndex = updatedActivities.findIndex(a => !a.isCompleted);
+      const nextIndex = optimisticActivities.findIndex(a => !a.isCompleted);
       if (nextIndex >= 0) {
         setCurrentActivityIndex(nextIndex);
       }
@@ -208,22 +197,29 @@ export default function EventPage() {
       setCurrentActivityIndex(0); // Reset to 0 so we don't show an invalid activity
     }
 
-    // Sync with server in the background (non-blocking)
+    // Sync with server in the background (non-blocking) - use partial update
     try {
-      console.log('handleActivityStop: Syncing with server', {
+      console.log('handleActivityStop: Syncing with server (partial update)', {
         eventId,
+        activityId: currentActivity.id,
         currentActivityIndex,
         timeSpent,
-        activitiesCount: updatedActivities.length,
+        extraTimeTaken,
+        timeGained,
       });
 
-      const updatedEvent = await updateEvent(eventId, {
-        activities: updatedActivities,
+      // Use partial update - only update the single activity being stopped
+      const updatedEvent = await updateActivity(eventId, currentActivity.id, {
+        timeSpent,
+        extraTimeTaken,
+        timeGained,
+        isCompleted: true,
+        isActive: false,
       });
 
-      console.log('handleActivityStop: Event synced successfully', {
+      console.log('handleActivityStop: Activity synced successfully', {
         eventId: updatedEvent.id,
-        activitiesCount: updatedEvent.activities.length,
+        activityId: currentActivity.id,
       });
 
       // Update with server response (in case server made any adjustments)
@@ -272,35 +268,38 @@ export default function EventPage() {
     // Mark as starting to prevent race conditions
     setIsStartingActivity(true);
 
-    // Map activities with proper data structure (no id, ensure all fields are correct types)
-    const updatedActivities = event.activities.map((a, idx) => ({
-      activityName: a.activityName,
-      timeAllotted: a.timeAllotted,
-      timeSpent: a.timeSpent ?? null,
-      extraTimeTaken: a.extraTimeTaken ?? null,
-      timeGained: a.timeGained ?? null,
-      isCompleted: a.isCompleted ?? false,
+    // Optimistic update: Update UI immediately
+    const optimisticActivities = event.activities.map((a, idx) => ({
+      ...a,
       isActive: idx === currentActivityIndex,
     }));
+    const optimisticEvent: Event = {
+      ...event,
+      activities: optimisticActivities,
+    };
+    setEvent(optimisticEvent);
+    setIsEventStarted(true);
 
     try {
-      console.log('handleStartActivity: Starting activity', {
+      console.log('handleStartActivity: Starting activity (partial update)', {
         eventId,
+        activityId: currentActivity.id,
         currentActivityIndex,
         activityName: currentActivity.activityName,
-        activitiesCount: updatedActivities.length,
       });
 
-      const updatedEvent = await updateEvent(eventId, {
-        activities: updatedActivities,
+      // Use partial update - only update the single activity being started
+      const updatedEvent = await updateActivity(eventId, currentActivity.id, {
+        isActive: true,
       });
 
       console.log('handleStartActivity: Activity started successfully', {
         eventId: updatedEvent.id,
+        activityId: currentActivity.id,
       });
 
+      // Update with server response
       setEvent(updatedEvent);
-      setIsEventStarted(true);
     } catch (error) {
       console.error('Error starting activity:', {
         error,
@@ -344,39 +343,26 @@ export default function EventPage() {
     
     if (!confirmed) return;
 
-    // Mark activity as completed (skipped) without time tracking
-    const updatedActivities = event.activities.map((a, idx) => {
+    // Optimistic update: Mark activity as completed (skipped) without time tracking
+    const optimisticActivities = event.activities.map((a, idx) => {
       if (idx === currentActivityIndex) {
         return {
-          activityName: a.activityName,
-          timeAllotted: a.timeAllotted,
-          timeSpent: a.timeSpent ?? null,
-          extraTimeTaken: a.extraTimeTaken ?? null,
-          timeGained: a.timeGained ?? null,
+          ...a,
           isCompleted: true, // Mark as completed (skipped)
           isActive: false,
         };
       }
-      return {
-        activityName: a.activityName,
-        timeAllotted: a.timeAllotted,
-        timeSpent: a.timeSpent ?? null,
-        extraTimeTaken: a.extraTimeTaken ?? null,
-        timeGained: a.timeGained ?? null,
-        isCompleted: a.isCompleted ?? false,
-        isActive: a.isActive ?? false,
-      };
+      return a;
     });
 
-    // Optimistic update
     const optimisticEvent: Event = {
       ...event,
-      activities: updatedActivities,
+      activities: optimisticActivities,
     };
     setEvent(optimisticEvent);
 
     // Find next incomplete activity
-    const nextIndex = updatedActivities.findIndex(a => !a.isCompleted);
+    const nextIndex = optimisticActivities.findIndex(a => !a.isCompleted);
     if (nextIndex >= 0) {
       setCurrentActivityIndex(nextIndex);
     } else {
@@ -384,11 +370,24 @@ export default function EventPage() {
       setCurrentActivityIndex(0);
     }
 
-    // Sync with server
+    // Sync with server - use partial update
     try {
-      const updatedEvent = await updateEvent(eventId, {
-        activities: updatedActivities,
+      console.log('handleSkipActivity: Skipping activity (partial update)', {
+        eventId,
+        activityId: currentActivity.id,
+        activityName: currentActivity.activityName,
       });
+
+      const updatedEvent = await updateActivity(eventId, currentActivity.id, {
+        isCompleted: true,
+        isActive: false,
+      });
+
+      console.log('handleSkipActivity: Activity skipped successfully', {
+        eventId: updatedEvent.id,
+        activityId: currentActivity.id,
+      });
+
       setEvent(updatedEvent);
     } catch (error) {
       console.error('Error skipping activity:', error);
@@ -424,48 +423,54 @@ export default function EventPage() {
       // Mark as starting to prevent race conditions
       setIsStartingActivity(true);
       
+      const nextActivity = event.activities[nextIndex];
       setCurrentActivityIndex(nextIndex);
       
-      // Start the next activity - map with proper data structure
-      const updatedActivities = event.activities.map((a, idx) => ({
-        activityName: a.activityName,
-        timeAllotted: a.timeAllotted,
-        timeSpent: a.timeSpent ?? null,
-        extraTimeTaken: a.extraTimeTaken ?? null,
-        timeGained: a.timeGained ?? null,
-        isCompleted: a.isCompleted ?? false,
+      // Optimistic update: Update UI immediately
+      const optimisticActivities = event.activities.map((a, idx) => ({
+        ...a,
         isActive: idx === nextIndex,
       }));
+      const optimisticEvent: Event = {
+        ...event,
+        activities: optimisticActivities,
+      };
+      setEvent(optimisticEvent);
+      setIsEventStarted(true);
 
       try {
-        console.log('handleStartNextActivity: Starting next activity', {
+        console.log('handleStartNextActivity: Starting next activity (partial update)', {
           eventId,
+          activityId: nextActivity.id,
           nextIndex,
-          activityName: event.activities[nextIndex]?.activityName,
-          activitiesCount: updatedActivities.length,
+          activityName: nextActivity.activityName,
         });
 
-        const updatedEvent = await updateEvent(eventId, {
-          activities: updatedActivities,
+        // Use partial update - only update the single activity being started
+        const updatedEvent = await updateActivity(eventId, nextActivity.id, {
+          isActive: true,
         });
 
         console.log('handleStartNextActivity: Next activity started successfully', {
           eventId: updatedEvent.id,
+          activityId: nextActivity.id,
         });
 
+        // Update with server response
         setEvent(updatedEvent);
-        setIsEventStarted(true);
       } catch (error) {
         console.error('Error starting next activity:', {
           error,
           errorMessage: error instanceof Error ? error.message : 'Unknown error',
           eventId,
+          activityId: nextActivity.id,
           nextIndex,
-          activitiesCount: updatedActivities.length,
         });
         alert('Failed to start next activity. Please try again.');
         // Revert index change on error
         setCurrentActivityIndex(currentActivityIndex);
+        // Revert optimistic update
+        setEvent(event);
       } finally {
         // Always reset the flag
         setIsStartingActivity(false);

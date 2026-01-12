@@ -179,6 +179,51 @@ export async function deleteEvent(id: string): Promise<void> {
   }
 }
 
+/**
+ * Update a single activity within an event
+ * Optimized for partial updates (start/stop activities)
+ * instead of updating all activities at once
+ */
+export async function updateActivity(
+  eventId: string,
+  activityId: string,
+  activity: Partial<{
+    activityName: string;
+    timeAllotted: number;
+    timeSpent: number | null;
+    extraTimeTaken: number | null;
+    timeGained: number | null;
+    isCompleted: boolean;
+    isActive: boolean;
+    order: number;
+  }>
+): Promise<Event> {
+  const url = `${API_BASE}/events/${eventId}/activities/${activityId}`;
+  console.log('updateActivity: Making PATCH request', {
+    url,
+    eventId,
+    activityId,
+    activityUpdates: Object.keys(activity),
+  });
+
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(activity),
+  });
+
+  console.log('updateActivity: Response received', {
+    url,
+    status: response.status,
+    statusText: response.statusText,
+    ok: response.ok,
+  });
+
+  const updatedEvent = await handleResponse<any>(response);
+  return transformEvent(updatedEvent);
+}
+
 // Bulk operations
 export async function bulkDeleteEvents(
   startDate: string,
