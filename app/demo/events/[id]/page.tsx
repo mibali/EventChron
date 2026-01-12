@@ -227,6 +227,18 @@ export default function DemoEventPage() {
     // Find next incomplete activity
     const nextIndex = event.activities.findIndex((a, idx) => idx > currentActivityIndex && !a.isCompleted);
     if (nextIndex >= 0) {
+      const nextActivity = event.activities[nextIndex];
+      
+      // Don't allow starting if next activity is already active or completed
+      if (nextActivity.isActive) {
+        console.warn('Next activity is already active');
+        return;
+      }
+      if (nextActivity.isCompleted) {
+        console.warn('Next activity is already completed');
+        return;
+      }
+
       setCurrentActivityIndex(nextIndex);
       
       // Start the next activity
