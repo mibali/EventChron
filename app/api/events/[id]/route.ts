@@ -50,7 +50,7 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   const eventId = params?.id;
-  let session = null;
+  let session: Awaited<ReturnType<typeof auth>> = null;
   let body: any = null;
 
   try {
