@@ -161,7 +161,26 @@ export async function PUT(
       return NextResponse.json({ error: 'Event not found' }, { status: 404 });
     }
 
-    console.error('PUT /api/events/[id]: Error', error);
+    console.error('PUT /api/events/[id]: Error', {
+      error,
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      errorStack: error instanceof Error ? error.stack : undefined,
+      eventId,
+      userId: session?.user?.id,
+      hasActivities: !!body?.activities,
+      activitiesCount: body?.activities?.length,
+      activitiesSample: body?.activities?.slice(0, 2), // First 2 activities for debugging
+      requestBody: JSON.stringify(body, null, 2),
+    });
+    
+    // If it's a Prisma error, log more details
+    if (error && typeof error === 'object' && 'code' in error) {
+      console.error('PUT /api/events/[id]: Prisma error details', {
+        code: (error as any).code,
+        meta: (error as any).meta,
+      });
+    }
+    
     return NextResponse.json(
       { error: 'Failed to update event' },
       { status: 500 }

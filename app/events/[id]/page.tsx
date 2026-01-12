@@ -139,13 +139,15 @@ export default function EventPage() {
     }
 
     // Create updated activities array using map to avoid mutation
+    // Ensure proper data structure (no id, correct types for all fields)
     const updatedActivities = event.activities.map((a, idx) => {
       if (idx === currentActivityIndex) {
         const extraTimeTaken = timeSpent > a.timeAllotted ? timeSpent - a.timeAllotted : 0;
         const timeGained = timeSpent <= a.timeAllotted ? a.timeAllotted - timeSpent : 0;
         
         return {
-          ...a,
+          activityName: a.activityName,
+          timeAllotted: a.timeAllotted,
           timeSpent,
           extraTimeTaken,
           timeGained,
@@ -153,7 +155,16 @@ export default function EventPage() {
           isActive: false,
         };
       }
-      return a;
+      // Return other activities with proper structure
+      return {
+        activityName: a.activityName,
+        timeAllotted: a.timeAllotted,
+        timeSpent: a.timeSpent ?? null,
+        extraTimeTaken: a.extraTimeTaken ?? null,
+        timeGained: a.timeGained ?? null,
+        isCompleted: a.isCompleted ?? false,
+        isActive: a.isActive ?? false,
+      };
     });
 
     // Optimistic update: Update UI immediately for instant feedback
@@ -221,20 +232,43 @@ export default function EventPage() {
     // Don't allow starting already completed activities
     if (currentActivity.isCompleted) return;
 
+    // Map activities with proper data structure (no id, ensure all fields are correct types)
     const updatedActivities = event.activities.map((a, idx) => ({
-      ...a,
+      activityName: a.activityName,
+      timeAllotted: a.timeAllotted,
+      timeSpent: a.timeSpent ?? null,
+      extraTimeTaken: a.extraTimeTaken ?? null,
+      timeGained: a.timeGained ?? null,
+      isCompleted: a.isCompleted ?? false,
       isActive: idx === currentActivityIndex,
     }));
 
     try {
+      console.log('handleStartActivity: Starting activity', {
+        eventId,
+        currentActivityIndex,
+        activityName: currentActivity.activityName,
+        activitiesCount: updatedActivities.length,
+      });
+
       const updatedEvent = await updateEvent(eventId, {
         activities: updatedActivities,
+      });
+
+      console.log('handleStartActivity: Activity started successfully', {
+        eventId: updatedEvent.id,
       });
 
       setEvent(updatedEvent);
       setIsEventStarted(true);
     } catch (error) {
-      console.error('Error starting activity:', error);
+      console.error('Error starting activity:', {
+        error,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        eventId,
+        currentActivityIndex,
+        activitiesCount: updatedActivities.length,
+      });
       alert('Failed to start activity. Please try again.');
     }
   };
@@ -257,21 +291,43 @@ export default function EventPage() {
     if (nextIndex >= 0) {
       setCurrentActivityIndex(nextIndex);
       
-      // Start the next activity
+      // Start the next activity - map with proper data structure
       const updatedActivities = event.activities.map((a, idx) => ({
-        ...a,
+        activityName: a.activityName,
+        timeAllotted: a.timeAllotted,
+        timeSpent: a.timeSpent ?? null,
+        extraTimeTaken: a.extraTimeTaken ?? null,
+        timeGained: a.timeGained ?? null,
+        isCompleted: a.isCompleted ?? false,
         isActive: idx === nextIndex,
       }));
 
       try {
+        console.log('handleStartNextActivity: Starting next activity', {
+          eventId,
+          nextIndex,
+          activityName: event.activities[nextIndex]?.activityName,
+          activitiesCount: updatedActivities.length,
+        });
+
         const updatedEvent = await updateEvent(eventId, {
           activities: updatedActivities,
+        });
+
+        console.log('handleStartNextActivity: Next activity started successfully', {
+          eventId: updatedEvent.id,
         });
 
         setEvent(updatedEvent);
         setIsEventStarted(true);
       } catch (error) {
-        console.error('Error starting next activity:', error);
+        console.error('Error starting next activity:', {
+          error,
+          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          eventId,
+          nextIndex,
+          activitiesCount: updatedActivities.length,
+        });
         alert('Failed to start next activity. Please try again.');
       }
     }
@@ -280,9 +336,20 @@ export default function EventPage() {
   const handleUpdateActivities = async (updatedActivities: Activity[]) => {
     if (!event) return;
 
+    // Ensure proper data structure (no id, correct types for all fields)
+    const activitiesToSend = updatedActivities.map((a) => ({
+      activityName: a.activityName,
+      timeAllotted: a.timeAllotted,
+      timeSpent: a.timeSpent ?? null,
+      extraTimeTaken: a.extraTimeTaken ?? null,
+      timeGained: a.timeGained ?? null,
+      isCompleted: a.isCompleted ?? false,
+      isActive: a.isActive ?? false,
+    }));
+
     try {
       const updatedEvent = await updateEvent(eventId, {
-        activities: updatedActivities,
+        activities: activitiesToSend,
       });
 
       setEvent(updatedEvent);
