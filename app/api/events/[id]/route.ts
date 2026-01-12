@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import type { Session } from 'next-auth';
 
 export async function GET(
   request: NextRequest,
@@ -50,7 +51,7 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   const eventId = params?.id;
-  let session: Awaited<ReturnType<typeof auth>> = null;
+  let session: Session | null = null;
   let body: any = null;
 
   try {
@@ -62,6 +63,9 @@ export async function PUT(
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    // TypeScript guard: session is guaranteed to be non-null here
+    const userId = session.user.id;
 
     // Parse request body
     try {
@@ -118,7 +122,7 @@ export async function PUT(
         throw new Error('EVENT_NOT_FOUND');
       }
 
-      if (existingEvent.userId !== session.user.id) {
+      if (existingEvent.userId !== userId) {
         throw new Error('EVENT_NOT_FOUND');
       }
 
@@ -166,12 +170,12 @@ export async function PUT(
       error,
       errorMessage: error instanceof Error ? error.message : 'Unknown error',
       errorStack: error instanceof Error ? error.stack : undefined,
-      eventId,
-      userId: session?.user?.id,
+      eventId: eventId || params?.id,
+      userId: session?.user?.id || null,
       hasActivities: !!body?.activities,
       activitiesCount: body?.activities?.length,
       activitiesSample: body?.activities?.slice(0, 2), // First 2 activities for debugging
-      requestBody: JSON.stringify(body, null, 2),
+      requestBody: body ? JSON.stringify(body, null, 2) : null,
     });
     
     // If it's a Prisma error, log more details

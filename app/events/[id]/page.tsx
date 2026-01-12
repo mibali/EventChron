@@ -618,9 +618,9 @@ export default function EventPage() {
     const activitiesToSend = updatedActivities.map((a) => ({
       activityName: a.activityName,
       timeAllotted: a.timeAllotted,
-      timeSpent: a.timeSpent ?? null,
-      extraTimeTaken: a.extraTimeTaken ?? null,
-      timeGained: a.timeGained ?? null,
+      timeSpent: a.timeSpent ?? undefined,
+      extraTimeTaken: a.extraTimeTaken ?? undefined,
+      timeGained: a.timeGained ?? undefined,
       isCompleted: a.isCompleted ?? false,
       isActive: a.isActive ?? false,
     }));

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import type { Session } from 'next-auth';
 
 /**
  * PATCH /api/events/[id]/activities/[activityId]
@@ -145,7 +146,7 @@ export async function PATCH(
     return NextResponse.json(result);
   } catch (error) {
     // Get session for logging (don't fail if auth fails)
-    let session = null;
+    let session: Session | null = null;
     try {
       session = await auth();
     } catch {

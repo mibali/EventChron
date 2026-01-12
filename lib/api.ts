@@ -139,7 +139,7 @@ export async function updateEvent(
     logoUrl: string;
     logoAlignment: 'left' | 'center' | 'right';
     timerGradient: TimerGradient;
-    activities: Activity[];
+    activities: Omit<Activity, 'id'>[];
   }>
 ): Promise<Event> {
   const url = `${API_BASE}/events/${id}`;
