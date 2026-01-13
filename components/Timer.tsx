@@ -14,6 +14,8 @@ interface TimerProps {
   onNextActivity?: () => void;
   onStartNext?: () => void;
   hasNextActivity?: boolean;
+  isStoppingActivity?: boolean;
+  isStartingActivity?: boolean;
 }
 
 export default function Timer({ 
@@ -25,6 +27,8 @@ export default function Timer({
   onNextActivity,
   onStartNext,
   hasNextActivity = false,
+  isStoppingActivity = false,
+  isStartingActivity = false,
 }: TimerProps) {
   const [elapsed, setElapsed] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
@@ -49,6 +53,8 @@ export default function Timer({
       setIsRunning(true);
     } else {
       setIsRunning(false);
+      // Hide overlay when activity becomes inactive (stopped)
+      setShowOverlay(false);
     }
   }, [isActive]);
 
@@ -143,21 +149,38 @@ export default function Timer({
   }, [isYellowState, isRunning]);
 
   const handleOverlayStop = () => {
+    // Prevent action if already stopping or if timer is not running
+    if (isStoppingActivity || !isRunning) {
+      return;
+    }
     handleStop();
-    setShowOverlay(false);
+    // Don't hide overlay immediately - let the operation complete
+    // The overlay will hide when the activity becomes inactive
   };
 
   const handleOverlayNext = () => {
+    // Prevent action if operations are in progress
+    if (isStoppingActivity || isStartingActivity) {
+      return;
+    }
     if (onNextActivity) {
       onNextActivity();
-      setShowOverlay(false);
+      // Keep overlay visible briefly to show action was taken
+      setTimeout(() => {
+        setShowOverlay(false);
+      }, 500);
     }
   };
 
   const handleOverlayStartNext = () => {
+    // Prevent action if already starting or stopping
+    if (isStartingActivity || isStoppingActivity) {
+      return;
+    }
     if (onStartNext) {
       onStartNext();
-      setShowOverlay(false);
+      // Don't hide overlay immediately - keep it visible during operation
+      // It will hide when the new activity becomes active
     }
   };
 
@@ -191,16 +214,22 @@ export default function Timer({
         >
           <button
             onClick={handleOverlayStop}
-            className="p-2.5 bg-red-600/95 hover:bg-red-700 text-white rounded-lg transition-all hover:scale-110 active:scale-95 shadow-lg"
-            title="Stop Activity"
+            disabled={isStoppingActivity || !isRunning}
+            className={`p-2.5 bg-red-600/95 hover:bg-red-700 text-white rounded-lg transition-all hover:scale-110 active:scale-95 shadow-lg ${
+              isStoppingActivity || !isRunning ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+            title={isStoppingActivity ? 'Stopping...' : 'Stop Activity'}
           >
             <Square className={isFullScreen ? 'w-7 h-7' : 'w-5 h-5'} />
           </button>
           {hasNextActivity && onNextActivity && (
             <button
               onClick={handleOverlayNext}
-              className="p-2.5 bg-gray-600/95 hover:bg-gray-700 text-white rounded-lg transition-all hover:scale-110 active:scale-95 shadow-lg"
-              title="Next Activity"
+              disabled={isStoppingActivity || isStartingActivity}
+              className={`p-2.5 bg-gray-600/95 hover:bg-gray-700 text-white rounded-lg transition-all hover:scale-110 active:scale-95 shadow-lg ${
+                isStoppingActivity || isStartingActivity ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+              title={isStoppingActivity || isStartingActivity ? 'Please wait...' : 'Next Activity'}
             >
               <ChevronRight className={isFullScreen ? 'w-7 h-7' : 'w-5 h-5'} />
             </button>
@@ -208,8 +237,11 @@ export default function Timer({
           {hasNextActivity && onStartNext && (
             <button
               onClick={handleOverlayStartNext}
-              className="p-2.5 bg-green-600/95 hover:bg-green-700 text-white rounded-lg transition-all hover:scale-110 active:scale-95 shadow-lg"
-              title="Start Next Activity"
+              disabled={isStartingActivity || isStoppingActivity}
+              className={`p-2.5 bg-green-600/95 hover:bg-green-700 text-white rounded-lg transition-all hover:scale-110 active:scale-95 shadow-lg ${
+                isStartingActivity || isStoppingActivity ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+              title={isStartingActivity ? 'Starting...' : isStoppingActivity ? 'Please wait...' : 'Start Next Activity'}
             >
               <Play className={isFullScreen ? 'w-7 h-7' : 'w-5 h-5'} />
             </button>

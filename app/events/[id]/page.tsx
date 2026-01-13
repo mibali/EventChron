@@ -1013,6 +1013,8 @@ export default function EventPage() {
                     onNextActivity={handleNextActivity}
                     onStartNext={handleStartNextActivity}
                     hasNextActivity={event.activities.some((a, idx) => idx > currentActivityIndex && !a.isCompleted)}
+                    isStoppingActivity={isStoppingActivity}
+                    isStartingActivity={isStartingActivity}
                   />
                 </div>
               )}
