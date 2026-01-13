@@ -273,6 +273,10 @@ export default function EventPage() {
       const nextIndex = optimisticActivities.findIndex(a => !a.isCompleted);
       if (nextIndex >= 0) {
         setCurrentActivityIndex(nextIndex);
+      } else {
+        // No incomplete activities found - all must be completed (edge case)
+        // This can happen if the optimistic update calculation was wrong
+        setCurrentActivityIndex(0);
       }
     } else {
       // All activities completed - ensure we're not trying to show a specific activity
@@ -307,6 +311,19 @@ export default function EventPage() {
       // Update with server response (in case server made any adjustments)
       setEvent(updatedEvent);
       setSyncStatus('synced');
+      
+      // Re-check if all activities are completed after server update
+      const allCompletedAfterUpdate = updatedEvent.activities.every(a => a.isCompleted);
+      if (allCompletedAfterUpdate) {
+        // Ensure we're at index 0 when all are completed
+        setCurrentActivityIndex(0);
+      } else {
+        // Find the first incomplete activity
+        const firstIncomplete = updatedEvent.activities.findIndex(a => !a.isCompleted);
+        if (firstIncomplete >= 0) {
+          setCurrentActivityIndex(firstIncomplete);
+        }
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const is503Error = errorMessage.includes('503') || errorMessage.includes('Service temporarily unavailable');
@@ -996,10 +1013,10 @@ export default function EventPage() {
                   </div>
                   <button
                     onClick={handleStartActivity}
-                    disabled={isStartingActivity || currentActivity.isActive}
+                    disabled={isStartingActivity || currentActivity.isActive || currentActivity.isCompleted}
                     className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-4 px-8 rounded-lg shadow-lg transition-colors text-lg"
                   >
-                    {isStartingActivity ? 'Starting...' : 'Start Activity'}
+                    {isStartingActivity ? 'Starting...' : currentActivity.isCompleted ? 'Activity Completed' : 'Start Activity'}
                   </button>
                 </div>
               ) : (
