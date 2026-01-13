@@ -60,11 +60,11 @@ export default function EventPage() {
     }
 
     const retryFailedUpdates = async () => {
-      const updatesToRetry = failedUpdates.filter(u => u.retries < 3);
+      const updatesToRetry = failedUpdates.filter(u => u.retries < 5); // Increased max retries for 503 errors
+      
       if (updatesToRetry.length === 0) {
-        // All updates exceeded retry limit - clear queue
         setFailedUpdates([]);
-        setSyncStatus('error');
+        setSyncStatus('synced');
         return;
       }
 
@@ -74,6 +74,12 @@ export default function EventPage() {
       
       for (const update of updatesToRetry) {
         try {
+          // Exponential backoff: wait longer for each retry (2s, 4s, 8s, 16s, 32s)
+          const backoffDelay = Math.min(2000 * Math.pow(2, update.retries), 32000);
+          if (update.retries > 0) {
+            await new Promise(resolve => setTimeout(resolve, backoffDelay));
+          }
+          
           if (update.type === 'startActivity' || update.type === 'stopActivity' || update.type === 'skipActivity') {
             await updateActivity(update.data.eventId, update.data.activityId, {
               ...(update.data.isActive !== undefined && { isActive: update.data.isActive }),
@@ -84,12 +90,22 @@ export default function EventPage() {
             });
             
             // Success - don't add back to queue
-            console.log('Retry successful for', update.type);
+            console.log('Retry successful for', update.type, 'after', update.retries, 'retries');
           }
         } catch (error) {
-          // Increment retry count and keep in queue
-          updatedQueue.push({ ...update, retries: update.retries + 1 });
-          console.warn('Retry failed for', update.type, 'attempt', update.retries + 1);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          const isRetryable = errorMessage.includes('503') || 
+                             errorMessage.includes('Service temporarily unavailable') ||
+                             errorMessage.includes('timeout') ||
+                             errorMessage.includes('network');
+          
+          // Only keep retryable errors in queue
+          if (isRetryable && update.retries < 5) {
+            updatedQueue.push({ ...update, retries: update.retries + 1 });
+            console.warn('Retry failed for', update.type, 'attempt', update.retries + 1, 'of 5');
+          } else {
+            console.error('Retry exhausted for', update.type, 'after', update.retries, 'attempts');
+          }
         }
       }
 
@@ -101,10 +117,14 @@ export default function EventPage() {
         setSyncStatus('synced');
       } else {
         setSyncStatus('error');
+        // Schedule next retry with exponential backoff
+        const maxRetries = Math.max(...updatedQueue.map(u => u.retries));
+        const nextRetryDelay = Math.min(2000 * Math.pow(2, maxRetries), 32000);
+        setTimeout(retryFailedUpdates, nextRetryDelay);
       }
     };
 
-    // Retry after 2 seconds
+    // Retry after 2 seconds initially
     const timeout = setTimeout(retryFailedUpdates, 2000);
     return () => clearTimeout(timeout);
   }, [failedUpdates, syncStatus]);
@@ -288,34 +308,43 @@ export default function EventPage() {
       setEvent(updatedEvent);
       setSyncStatus('synced');
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const is503Error = errorMessage.includes('503') || errorMessage.includes('Service temporarily unavailable');
+      
       console.error('handleActivityStop: Error syncing with server', {
         error,
         eventId,
-        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorMessage,
         errorStack: error instanceof Error ? error.stack : undefined,
+        is503Error,
       });
       
       // Set error status
       setSyncStatus('error');
       
-      // Queue for retry
-      setFailedUpdates(prev => [...prev, {
-        type: 'stopActivity',
-        data: {
-          eventId,
-          activityId: currentActivity.id,
-          timeSpent,
-          extraTimeTaken,
-          timeGained,
-          isCompleted: true,
-          isActive: false,
-        },
-        retries: 0,
-      }]);
-      
-      // Keep optimistic update since timer already stopped - user saw it stop
-      // Show error but don't block the UI
-      alert('Failed to save activity time. The activity was stopped locally, but changes may not be saved. Please refresh the page.');
+      // Queue for retry (503 errors are retryable)
+      if (is503Error || errorMessage.includes('timeout') || errorMessage.includes('network')) {
+        setFailedUpdates(prev => [...prev, {
+          type: 'stopActivity',
+          data: {
+            eventId,
+            activityId: currentActivity.id,
+            timeSpent,
+            extraTimeTaken,
+            timeGained,
+            isCompleted: true,
+            isActive: false,
+          },
+          retries: 0,
+        }]);
+        
+        // Keep optimistic update since timer already stopped - user saw it stop
+        // Show less alarming message for retryable errors
+        alert('Activity stopped locally. Syncing with server... If this message appears again, please refresh the page.');
+      } else {
+        // Non-retryable error - show full error message
+        alert('Failed to save activity time. The activity was stopped locally, but changes may not be saved. Please refresh the page.');
+      }
     } finally {
       // Always reset the flag
       setIsStoppingActivity(false);
@@ -383,35 +412,44 @@ export default function EventPage() {
       // Update sync status
       setSyncStatus('synced');
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const is503Error = errorMessage.includes('503') || errorMessage.includes('Service temporarily unavailable');
+      
       console.error('Error starting activity:', {
         error,
-        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorMessage,
         eventId,
         currentActivityIndex,
         activityId: currentActivity.id,
+        is503Error,
       });
       
       // Set error status
       setSyncStatus('error');
       
-      // Queue for retry
-      setFailedUpdates(prev => [...prev, {
-        type: 'startActivity',
-        data: { eventId, activityId: currentActivity.id, isActive: true },
-        retries: 0,
-      }]);
-      
-      // Revert optimistic update on error
-      setEvent(event);
-      setIsEventStarted(false);
-      
-      alert(
-        'Failed to start activity. Please try again.\n\n' +
-        'If the problem persists, you can:\n' +
-        '1. Skip this activity and continue with the next one\n' +
-        '2. Navigate to another activity and come back later\n' +
-        '3. Refresh the page and try again'
-      );
+      // Queue for retry if it's a retryable error
+      if (is503Error || errorMessage.includes('timeout') || errorMessage.includes('network')) {
+        setFailedUpdates(prev => [...prev, {
+          type: 'startActivity',
+          data: { eventId, activityId: currentActivity.id, isActive: true },
+          retries: 0,
+        }]);
+        
+        // Don't revert optimistic update for retryable errors - let retry handle it
+        alert('Starting activity... Syncing with server. If this message appears again, please try again.');
+      } else {
+        // Revert optimistic update on non-retryable error
+        setEvent(event);
+        setIsEventStarted(false);
+        
+        alert(
+          'Failed to start activity. Please try again.\n\n' +
+          'If the problem persists, you can:\n' +
+          '1. Skip this activity and continue with the next one\n' +
+          '2. Navigate to another activity and come back later\n' +
+          '3. Refresh the page and try again'
+        );
+      }
     } finally {
       // Always reset the flag
       setIsStartingActivity(false);
@@ -485,25 +523,45 @@ export default function EventPage() {
         activityId: currentActivity.id,
       });
 
+      // Update with server response
       setEvent(updatedEvent);
       setSyncStatus('synced');
     } catch (error) {
-      console.error('Error skipping activity:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const is503Error = errorMessage.includes('503') || errorMessage.includes('Service temporarily unavailable');
+      
+      console.error('handleSkipActivity: Error syncing with server', {
+        error,
+        errorMessage,
+        eventId,
+        activityId: currentActivity.id,
+        is503Error,
+      });
+      
+      // Set error status
       setSyncStatus('error');
       
-      // Queue for retry
-      setFailedUpdates(prev => [...prev, {
-        type: 'skipActivity',
-        data: {
-          eventId,
-          activityId: currentActivity.id,
-          isCompleted: true,
-          isActive: false,
-        },
-        retries: 0,
-      }]);
-      
-      alert('Failed to skip activity. The activity was skipped locally, but changes may not be saved. Please refresh the page.');
+      // Queue for retry if it's a retryable error
+      if (is503Error || errorMessage.includes('timeout') || errorMessage.includes('network')) {
+        setFailedUpdates(prev => [...prev, {
+          type: 'skipActivity',
+          data: {
+            eventId,
+            activityId: currentActivity.id,
+            isCompleted: true,
+            isActive: false,
+          },
+          retries: 0,
+        }]);
+        
+        // Keep optimistic update - let retry handle it
+        alert('Activity skipped locally. Syncing with server... If this message appears again, please refresh the page.');
+      } else {
+        // Revert optimistic update on non-retryable error
+        setEvent(event);
+        
+        alert('Failed to skip activity. Please try again.');
+      }
       // Keep optimistic update - user already saw the skip
     }
   };

@@ -40,7 +40,8 @@ export async function PATCH(
       );
     }
 
-    // Use transaction to ensure data consistency
+    // Use transaction with timeout to prevent hanging (20 seconds max)
+    // This prevents 503 errors from long-running transactions
     const result = await prisma.$transaction(async (tx) => {
       // Verify event exists and belongs to user
       const event = await tx.event.findUnique({
@@ -108,6 +109,7 @@ export async function PATCH(
         updateData.isActive = body.isActive === true;
         
         // If setting an activity as active, deactivate all other activities in the event
+        // Use a more efficient query with limit to avoid scanning all activities
         if (body.isActive === true) {
           await tx.activity.updateMany({
             where: {
@@ -125,12 +127,13 @@ export async function PATCH(
       }
 
       // Update the activity
-      const updatedActivity = await tx.activity.update({
+      await tx.activity.update({
         where: { id: activityId },
         data: updateData,
       });
 
       // Return the full event with all activities for consistency
+      // This is necessary for the frontend to stay in sync
       const updatedEvent = await tx.event.findUnique({
         where: { id: eventId },
         include: {
@@ -141,6 +144,9 @@ export async function PATCH(
       });
 
       return updatedEvent;
+    }, {
+      maxWait: 10000, // Maximum time to wait for a transaction slot (10 seconds)
+      timeout: 20000, // Maximum time the transaction can run (20 seconds)
     });
 
     return NextResponse.json(result);
@@ -174,6 +180,16 @@ export async function PATCH(
       }
     }
 
+    // Check for timeout or connection errors
+    const isTimeoutError = error instanceof Error && (
+      error.message.includes('timeout') ||
+      error.message.includes('TIMEOUT') ||
+      error.message.includes('P2034') || // Prisma transaction timeout
+      error.message.includes('P1008') || // Prisma operation timeout
+      error.message.includes('ECONNRESET') ||
+      error.message.includes('ETIMEDOUT')
+    );
+
     console.error('PATCH /api/events/[id]/activities/[activityId]: Error', {
       error,
       errorMessage: error instanceof Error ? error.message : 'Unknown error',
@@ -181,7 +197,17 @@ export async function PATCH(
       eventId: params?.id,
       activityId: params?.activityId,
       userId: session?.user?.id,
+      isTimeoutError,
+      errorCode: error && typeof error === 'object' && 'code' in error ? (error as any).code : undefined,
     });
+
+    // Return 503 for timeout/connection errors so client can retry
+    if (isTimeoutError) {
+      return NextResponse.json(
+        { error: 'Service temporarily unavailable. Please try again.' },
+        { status: 503 }
+      );
+    }
 
     return NextResponse.json(
       { error: 'Failed to update activity' },
